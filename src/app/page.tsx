@@ -12,7 +12,8 @@ function formatDate(date: string): string {
 
 export default async function HomePage() {
   const projects = await getAllProjects();
-  const featuredProjects = projects.filter((project) => project.featured).slice(0, 3);
+  const featuredProjects = projects.filter((project) => project.featured);
+  const featuredCards = (featuredProjects.length >= 3 ? featuredProjects : projects).slice(0, 3);
 
   return (
     <div className="space-y-10">
@@ -40,26 +41,39 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Featured Projects</h2>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-500">Highlights</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Featured Projects</h2>
+          </div>
           <Link href="/projects" className="text-sm font-medium text-slate-600 hover:text-slate-900">
             View all
           </Link>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
-          {featuredProjects.map((project) => (
-            <article key={project.slug} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          {featuredCards.map((project) => (
+            <article key={project.slug} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
                 {formatDate(project.date)}
               </p>
               <h3 className="mt-2 text-lg font-semibold text-slate-900">{project.title}</h3>
               <p className="mt-2 text-sm text-slate-600">{project.summary}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {project.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
               <Link
                 href={`/projects/${project.slug}`}
                 className="mt-4 inline-block text-sm font-medium text-slate-700 hover:text-slate-900"
               >
-                Read details
+                View details
               </Link>
             </article>
           ))}
