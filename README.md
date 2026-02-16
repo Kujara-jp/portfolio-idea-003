@@ -1,5 +1,9 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Workflow
+
+Development workflow is defined in `PLAN.md`. Read `PLAN.md` before making changes.
+
 ## Getting Started
 
 First, run the development server:
