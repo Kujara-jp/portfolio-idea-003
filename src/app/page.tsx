@@ -18,28 +18,28 @@ export default async function HomePage() {
   return (
     <div className="space-y-10">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Portfolio</p>
+        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">ポートフォリオ</p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">&lt;NAME&gt;</h1>
         <p className="mt-3 max-w-2xl text-lg text-slate-700">
-          Product-focused developer building clean web experiences with Next.js.
+          Next.js を中心に、使いやすいWeb体験を実装するプロダクト志向の開発者です。
         </p>
         <ul className="mt-4 space-y-2 text-sm text-slate-600">
-          <li>• Fast MVP implementation with TypeScript and App Router</li>
-          <li>• Content-driven delivery with simple MDX workflows</li>
-          <li>• Stable release flow with lint and build-first quality checks</li>
+          <li>• TypeScript と App Router で素早く MVP を実装</li>
+          <li>• MDX を活用したコンテンツ主導の運用フロー</li>
+          <li>• lint / build を軸にした安定したリリース運用</li>
         </ul>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
             href="/projects"
             className="rounded-full bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-700"
           >
-            Browse Projects
+            作品一覧を見る
           </Link>
           <Link
             href="/about"
             className="rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
           >
-            About This MVP
+            このMVPについて
           </Link>
         </div>
       </section>
@@ -76,18 +76,18 @@ export default async function HomePage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-500">Highlights</p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Featured Projects</h2>
+            <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-500">注目</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">ピックアップ作品</h2>
           </div>
           <Link href="/projects" className="text-sm font-medium text-slate-600 hover:text-slate-900">
-            View all
+            すべて見る
           </Link>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
           {featuredCards.map((project) => (
             <article key={project.slug} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
-                {formatDate(project.date)}
+                公開日 {formatDate(project.date)}
               </p>
               <h3 className="mt-2 text-lg font-semibold text-slate-900">{project.title}</h3>
               <p className="mt-2 text-sm text-slate-600">{project.summary}</p>
@@ -105,7 +105,7 @@ export default async function HomePage() {
                 href={`/projects/${project.slug}`}
                 className="mt-4 inline-block text-sm font-medium text-slate-700 hover:text-slate-900"
               >
-                View details
+                詳細を見る
               </Link>
             </article>
           ))}
