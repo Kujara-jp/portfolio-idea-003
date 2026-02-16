@@ -18,13 +18,16 @@ export default async function HomePage() {
   return (
     <div className="space-y-10">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Portfolio MVP</p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-          Build, publish, and iterate content with MDX.
-        </h1>
-        <p className="mt-4 max-w-2xl text-slate-600">
-          This starter shows a minimal, content-driven project setup using Next.js App Router and local MDX files.
+        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Portfolio</p>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">&lt;NAME&gt;</h1>
+        <p className="mt-3 max-w-2xl text-lg text-slate-700">
+          Product-focused developer building clean web experiences with Next.js.
         </p>
+        <ul className="mt-4 space-y-2 text-sm text-slate-600">
+          <li>• Fast MVP implementation with TypeScript and App Router</li>
+          <li>• Content-driven delivery with simple MDX workflows</li>
+          <li>• Stable release flow with lint and build-first quality checks</li>
+        </ul>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
             href="/projects"
