@@ -68,7 +68,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   return (
     <article className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
       <Link href="/projects" className="text-sm font-medium text-slate-600 hover:text-slate-900">
-        ← Back to projects
+        ← 作品一覧に戻る
       </Link>
 
       <header className="space-y-4">
@@ -76,8 +76,9 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         <p className="text-slate-600">{project.summary}</p>
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
           <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
-            {formatDate(project.date)}
+            公開日 {formatDate(project.date)}
           </p>
+          <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">タグ</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {project.tags.map((tag) => (
               <span
@@ -95,7 +96,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
               rel="noopener noreferrer"
               className="inline-flex items-center rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
             >
-              Repository
+              リポジトリ
             </a>
             <a
               href={project.demoUrl}
@@ -103,12 +104,12 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
               rel="noopener noreferrer"
               className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
             >
-              Live demo
+              デモを見る
             </a>
           </div>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">Summary</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">要約</h2>
           <div className="mt-3 space-y-2 text-sm text-slate-700">
             <p>
               <span className="font-semibold text-slate-900">課題:</span> {detailSummary.problem}

@@ -36,16 +36,16 @@ export default function RootLayout({
             </Link>
             <nav className="flex flex-wrap items-center gap-4 text-sm text-slate-600">
               <Link href="/" className="hover:text-slate-900">
-                Home
+                ホーム
               </Link>
               <Link href="/projects" className="hover:text-slate-900">
-                Projects
+                作品一覧
               </Link>
               <Link href="/about" className="hover:text-slate-900">
-                About
+                自己紹介
               </Link>
               <Link href="/contact" className="hover:text-slate-900">
-                Contact
+                お問い合わせ
               </Link>
             </nav>
           </div>
