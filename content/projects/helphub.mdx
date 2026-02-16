@@ -1,0 +1,33 @@
+---
+slug: "helphub"
+title: "HelpHub Content MVP"
+summary: "A content-first portfolio entry managed by <NAME> at <COMPANY>."
+tags: ["nextjs", "mdx", "content"]
+featured: true
+repoUrl: "<GITHUB_URL>"
+demoUrl: "<DEMO_URL>"
+date: "2026-02-16"
+---
+
+## 課題
+
+プロフィールや制作実績をすばやく更新できる構成が必要だった。
+
+## アプローチ
+
+データベースを使わず、`content/projects` の MDX を直接読み込む方式にした。
+
+## 技術
+
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- gray-matter
+
+## 結果
+
+一覧ページと詳細ページを静的生成し、更新コストを小さくできた。
+
+## 学び
+
+frontmatter の型チェックを早めに入れると、運用時のミスを減らせる。
