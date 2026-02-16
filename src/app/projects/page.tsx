@@ -14,7 +14,7 @@ export default async function ProjectsPage() {
   const projects = await getAllProjects();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Projects</h1>
         <p className="max-w-2xl text-slate-600">
@@ -22,14 +22,14 @@ export default async function ProjectsPage() {
         </p>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-2">
         {projects.map((project) => (
           <article key={project.slug} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
               {formatDate(project.date)}
             </p>
-            <h2 className="mt-2 text-xl font-semibold text-slate-900">{project.title}</h2>
-            <p className="mt-2 text-sm text-slate-600">{project.summary}</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">{project.title}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{project.summary}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {project.tags.map((tag) => (
                 <span
