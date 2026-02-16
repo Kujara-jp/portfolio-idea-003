@@ -1,0 +1,32 @@
+---
+slug: "tooling"
+title: "Tooling Notes"
+summary: "Internal tooling notes maintained by <NAME> for <COMPANY>."
+tags: ["tooling", "mdx", "workflow"]
+featured: false
+repoUrl: "<GITHUB_URL>"
+demoUrl: "<DEMO_URL>"
+date: "2025-12-05"
+---
+
+## 課題
+
+更新頻度の高い知見を、実装コードと同じリポジトリで管理したかった。
+
+## アプローチ
+
+Markdown ではなく MDX を採用し、必要時に最小限の JSX も扱えるようにした。
+
+## 技術
+
+- Next.js
+- gray-matter
+- App Router SSG
+
+## 結果
+
+公開ページと執筆ファイルの距離が近くなり、修正の反映が速くなった。
+
+## 学び
+
+ファイルベース運用は MVP と相性がよく、仕様変更にも追従しやすい。
