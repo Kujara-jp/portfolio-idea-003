@@ -45,6 +45,35 @@ export default async function HomePage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900">できること / 技術スタック</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          MVP 構築から運用改善まで、読みやすさと保守性を重視した実装を中心に対応します。
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {[
+            "Next.js",
+            "React",
+            "TypeScript",
+            "Tailwind",
+            "Supabase",
+            "PostgreSQL",
+            "GitHub",
+            "GitHub Actions",
+            "Vercel",
+            "UI/UX",
+            "DX/業務改善",
+          ].map((skill) => (
+            <span
+              key={skill}
+              className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700"
+            >
+              {skill}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-500">Highlights</p>
