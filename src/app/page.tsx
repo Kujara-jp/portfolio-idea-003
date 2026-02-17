@@ -74,6 +74,30 @@ export default async function HomePage() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <h2 className="text-lg font-semibold tracking-tight text-slate-900">デモ / リンク</h2>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <Link
+            href="https://helphub-pink.vercel.app/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100"
+          >
+            <h3 className="text-base font-semibold text-slate-900">Helphub（お問い合わせアプリ）</h3>
+            <p className="mt-2 text-sm text-slate-600">社内問い合わせとナレッジ管理のデモ</p>
+          </Link>
+          <Link
+            href="https://script.google.com/macros/s/AKfycbw4iMuLsAs7Qfzio8AMCQkP8UERdF2O95crLyvJKfnchSdH9lgBrZSv3VaFcJvG5M68pQ/exec"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100"
+          >
+            <h3 className="text-base font-semibold text-slate-900">抵抗値計算ツール（GAS）</h3>
+            <p className="mt-2 text-sm text-slate-600">電流由来の抵抗値と公差を計算するツール</p>
+          </Link>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium uppercase tracking-[0.16em] text-slate-500">注目</p>
