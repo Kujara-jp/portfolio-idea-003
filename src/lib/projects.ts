@@ -28,6 +28,14 @@ function readRequiredString(value: unknown, field: string): string {
   return value;
 }
 
+function readOptionalString(value: unknown, field: string): string {
+  if (typeof value !== "string") {
+    throw new Error(`Invalid '${field}' in project frontmatter.`);
+  }
+
+  return value.trim();
+}
+
 function readStringArray(value: unknown, field: string): string[] {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
     throw new Error(`Invalid '${field}' in project frontmatter.`);
@@ -51,8 +59,8 @@ function parseProjectFrontmatter(data: Record<string, unknown>): ProjectFrontmat
     summary: readRequiredString(data.summary, "summary"),
     tags: readStringArray(data.tags, "tags"),
     featured: readBoolean(data.featured, "featured"),
-    repoUrl: readRequiredString(data.repoUrl, "repoUrl"),
-    demoUrl: readRequiredString(data.demoUrl, "demoUrl"),
+    repoUrl: readOptionalString(data.repoUrl, "repoUrl"),
+    demoUrl: readOptionalString(data.demoUrl, "demoUrl"),
     date: readRequiredString(data.date, "date"),
   };
 }
