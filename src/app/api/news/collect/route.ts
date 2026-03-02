@@ -71,9 +71,9 @@ async function searchAINews(query: string): Promise<TavilySearchResult[]> {
       api_key: apiKey,
       query,
       max_results: 3,
-      search_depth: "basic",
+      search_depth: "comprehensive",
       include_answer: false,
-      include_raw_content: false,
+      include_raw_content: true,
     }),
   });
 
@@ -98,8 +98,8 @@ async function readerAgent(article: TavilySearchResult): Promise<{
   category: string;
   summary: string;
 }> {
-  // Simple analysis without AI - extract summary from content
-  const summary = article.content?.slice(0, 300) || article.title;
+  // Simple analysis without AI - extract summary from content (up to 500 chars)
+  const summary = article.content?.slice(0, 500) || article.title;
 
   // Basic category detection based on keywords
   let category = "other";
