@@ -13,60 +13,43 @@ interface TavilySearchResult {
 }
 
 
-// Claude API call for translation
-async function callClaude(prompt: string, systemPrompt?: string): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+// DeepL API call for translation
+async function translateWithDeepL(text: string, targetLang: string = "JA"): Promise<string> {
+  const apiKey = process.env.DEEPL_API_KEY;
 
-  console.log("[Claude API] API Key present:", !!apiKey);
-  console.log("[Claude API] API Key prefix:", apiKey ? apiKey.substring(0, 8) + "..." : "NONE");
+  console.log("[DeepL API] API Key present:", !!apiKey);
 
   if (!apiKey) {
-    console.error("[Claude API] ERROR: Anthropic API key not configured");
-    throw new Error("Anthropic API key not configured");
+    console.error("[DeepL API] ERROR: DeepL API key not configured");
+    throw new Error("DeepL API key not configured");
   }
 
-  const messages = [];
-  if (systemPrompt) {
-    messages.push({ role: "system", content: systemPrompt });
-  }
-  messages.push({ role: "user", content: prompt });
-
-  console.log("[Claude API] Making request with model: claude-sonnet-4-20250514");
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch("https://api-free.deepl.com/v1/translate", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      "Authorization": `DeepL-Auth-Key ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      messages,
+      text: [text],
+      target_lang: targetLang,
     }),
   });
 
-  console.log("[Claude API] Response status:", response.status);
-  console.log("[Claude API] Response statusText:", response.statusText);
+  console.log("[DeepL API] Response status:", response.status);
 
   if (!response.ok) {
     const error = await response.text();
-    console.error("[Claude API] ERROR response:", error);
-    // Check for insufficient credits error
-    if (error.includes("insufficient_quota") || error.includes("rate_limit") || error.includes("credit")) {
-      throw new Error("INSUFFICIENT_CREDITS");
+    console.error("[DeepL API] ERROR response:", error);
+    if (error.includes("quota") || error.includes("limit")) {
+      throw new Error("DEEPL_QUOTA_EXCEEDED");
     }
-    throw new Error(`Claude API error: ${error}`);
+    throw new Error(`DeepL API error: ${error}`);
   }
 
   const data = await response.json();
-  console.log("[Claude API] Response data keys:", Object.keys(data));
-  console.log("[Claude API] Content present:", !!data.content);
-
-  const result = data.content?.[0]?.text || "";
-  console.log("[Claude API] Result length:", result.length);
-  console.log("[Claude API] Result preview:", result.substring(0, 100));
+  const result = data.translations?.[0]?.text || "";
+  console.log("[DeepL API] Translated:", result.substring(0, 50));
 
   return result;
 }
@@ -109,110 +92,69 @@ async function searchAgent(): Promise<TavilySearchResult[]> {
   return results;
 }
 
-// Agent 2: Reader Agent - Analyze article importance
+// Agent 2: Reader Agent - Analyze article importance (simplified, no AI needed)
 async function readerAgent(article: TavilySearchResult): Promise<{
   isImportant: boolean;
   category: string;
   summary: string;
 }> {
-  const prompt = `
-Please analyze this article and determine:
-1. Is this important AI news worth including? (yes/no)
-2. What category does it belong to? (model/tool/research/other)
-3. Provide a brief summary in English.
+  // Simple analysis without AI - extract summary from content
+  const summary = article.content?.slice(0, 300) || article.title;
 
-Article:
-Title: ${article.title}
-Content: ${article.content}
-URL: ${article.url}
-
-Respond in JSON format:
-{"isImportant": true/false, "category": "model/tool/research/other", "summary": "..."}
-`;
-
-  const systemPrompt = "You are an expert AI news analyst. Respond only with valid JSON.";
-
-  try {
-    const result = await callClaude(prompt, systemPrompt);
-    return JSON.parse(result);
-  } catch (error) {
-    console.warn("Reader agent failed, using fallback:", error instanceof Error ? error.message : "Unknown error");
-    // Default fallback if parsing fails
-    return { isImportant: true, category: "other", summary: article.content?.slice(0, 200) || "" };
+  // Basic category detection based on keywords
+  let category = "other";
+  const titleLower = article.title.toLowerCase();
+  if (titleLower.includes("model") || titleLower.includes("gpt") || titleLower.includes("claude") || titleLower.includes("gemini")) {
+    category = "model";
+  } else if (titleLower.includes("tool") || titleLower.includes("feature") || titleLower.includes("launch") || titleLower.includes("release")) {
+    category = "tool";
+  } else if (titleLower.includes("research") || titleLower.includes("paper") || titleLower.includes("study") || titleLower.includes("发现")) {
+    category = "research";
   }
+
+  return { isImportant: true, category, summary };
 }
 
-// Agent 3: Translator Agent - Translate to Japanese (Claude → pending fallback)
+// Agent 3: Translator Agent - Translate to Japanese using DeepL
 async function translatorAgent(title: string, summary: string): Promise<{
   jaTitle: string;
   jaSummary: string;
-  provider: "claude" | "none";
+  provider: "deepl" | "none";
   needsRetry: boolean;
 }> {
   console.log("[TranslatorAgent] Starting translation for:", title.substring(0, 50));
 
-  const prompt = `
-Translate the following to Japanese. Keep the meaning accurate and natural.
-
-Title: ${title}
-Summary: ${summary}
-
-Respond in JSON format:
-{"jaTitle": "...", "jaSummary": "..."}
-`;
-
-  // Try Claude for translation
   try {
-    console.log("[TranslatorAgent] Calling Claude API...");
-    const result = await callClaude(prompt);
+    // Translate title
+    console.log("[TranslatorAgent] Translating title with DeepL...");
+    const jaTitle = await translateWithDeepL(title);
 
-    console.log("[TranslatorAgent] Raw result:", result);
+    // Translate summary
+    console.log("[TranslatorAgent] Translating summary with DeepL...");
+    const jaSummary = await translateWithDeepL(summary);
 
-    // Check if result is empty
-    if (!result || result.trim() === "") {
-      console.error("[TranslatorAgent] ERROR: Empty response from Claude");
-      return { jaTitle: title, jaSummary: summary, provider: "none", needsRetry: true };
-    }
-
-    const parsed = JSON.parse(result);
-    console.log("[TranslatorAgent] Parsed successfully:", parsed);
-    return { ...parsed, provider: "claude", needsRetry: false };
+    console.log("[TranslatorAgent] Translation complete");
+    return { jaTitle, jaSummary, provider: "deepl", needsRetry: false };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("[TranslatorAgent] ERROR:", errorMsg);
-    // Check for insufficient credits - mark for retry later
-    if (errorMsg === "INSUFFICIENT_CREDITS") {
-      console.warn("[TranslatorAgent] Claude credits exhausted, marking for retry later");
+    // Check for quota exceeded
+    if (errorMsg === "DEEPL_QUOTA_EXCEEDED") {
+      console.warn("[TranslatorAgent] DeepL quota exceeded, marking for retry");
       return { jaTitle: title, jaSummary: summary, provider: "none", needsRetry: true };
     }
-    // JSON parse error or other failures - mark for retry (don't mark as completed with untranslated content)
-    console.warn("[TranslatorAgent] Claude translation failed, marking for retry:", errorMsg);
+    // Other errors - mark for retry
+    console.warn("[TranslatorAgent] DeepL translation failed, marking for retry:", errorMsg);
     return { jaTitle: title, jaSummary: summary, provider: "none", needsRetry: true };
   }
 }
 
-// Agent 4: Editor Agent - Final summary
+// Agent 4: Editor Agent - Final summary (simplified, no AI needed)
 async function editorAgent(title: string, summary: string): Promise<string> {
-  const prompt = `
-Create a compelling headline and short description (max 100 chars for headline, 200 chars for description) in Japanese for this article.
-
-Title: ${title}
-Content: ${summary}
-
-Respond in JSON format:
-{"headline": "...", "description": "..."}
-`;
-
-  const systemPrompt = "You are an expert editor. Create engaging headlines. Respond only with valid JSON.";
-
-  try {
-    const result = await callClaude(prompt, systemPrompt);
-    const parsed = JSON.parse(result);
-    return `${parsed.headline}\n${parsed.description}`;
-  } catch (error) {
-    console.warn("Editor agent failed, using original text:", error instanceof Error ? error.message : "Unknown error");
-    return `${title}\n${summary}`;
-  }
+  // Simple headline creation - use title as headline, truncate summary
+  const headline = title.length > 100 ? title.substring(0, 97) + "..." : title;
+  const description = summary.length > 200 ? summary.substring(0, 197) + "..." : summary;
+  return `${headline}\n${description}`;
 }
 
 // Main handler
@@ -232,7 +174,7 @@ export async function POST(request: NextRequest) {
     const searchResults = await searchAgent();
 
     const collectedArticles: AiNews[] = [];
-    const translatorProviders: ("claude" | "none")[] = [];
+    const translatorProviders: ("deepl" | "none")[] = [];
     const MAX_ARTICLES = 3;
 
     for (const article of searchResults.slice(0, MAX_ARTICLES)) {
