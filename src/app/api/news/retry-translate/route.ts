@@ -1,94 +1,47 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin, AiNews } from "@/lib/supabase";
 
-// Claude API call
-async function callClaude(prompt: string, systemPrompt?: string): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+// DeepL API call for translation
+async function translateWithDeepL(text: string, targetLang: string = "JA"): Promise<string> {
+  const apiKey = process.env.DEEPL_API_KEY;
 
   if (!apiKey) {
-    throw new Error("Anthropic API key not configured");
+    throw new Error("DeepL API key not configured");
   }
 
-  const messages = [];
-  if (systemPrompt) {
-    messages.push({ role: "system", content: systemPrompt });
-  }
-  messages.push({ role: "user", content: prompt });
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch("https://api-free.deepl.com/v1/translate", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      "Authorization": `DeepL-Auth-Key ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      messages,
+      text: [text],
+      target_lang: targetLang,
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    if (error.includes("insufficient_quota") || error.includes("rate_limit") || error.includes("credit")) {
-      throw new Error("INSUFFICIENT_CREDITS");
+    if (error.includes("quota") || error.includes("limit")) {
+      throw new Error("DEEPL_QUOTA_EXCEEDED");
     }
-    throw new Error(`Claude API error: ${error}`);
+    throw new Error(`DeepL API error: ${error}`);
   }
 
   const data = await response.json();
-  return data.content?.[0]?.text || "";
+  return data.translations?.[0]?.text || "";
 }
 
-// Translator Agent
-async function translatorAgent(title: string, summary: string): Promise<{
-  jaTitle: string;
-  jaSummary: string;
-}> {
-  const prompt = `
-Translate the following to Japanese. Keep the meaning accurate and natural.
-
-Title: ${title}
-Summary: ${summary}
-
-Respond in JSON format:
-{"jaTitle": "...", "jaSummary": "..."}
-`;
-
-  const systemPrompt = "You are a professional translator. Translate accurately to Japanese. Respond only with valid JSON.";
-  const result = await callClaude(prompt, systemPrompt);
-  return JSON.parse(result);
+// Editor Agent - Simple text truncation
+function editorAgent(title: string, summary: string): { editedTitle: string; editedSummary: string } {
+  const headline = title.length > 100 ? title.substring(0, 97) + "..." : title;
+  const description = summary.length > 200 ? summary.substring(0, 197) + "..." : summary;
+  return { editedTitle: headline, editedSummary: description };
 }
 
-// Editor Agent
-async function editorAgent(title: string, summary: string): Promise<{ editedTitle: string; editedSummary: string }> {
-  const prompt = `
-Create a compelling headline and short description (max 100 chars for headline, 200 chars for description) in Japanese for this article.
-
-Title: ${title}
-Content: ${summary}
-
-Respond in JSON format:
-{"headline": "...", "description": "..."}
-`;
-
-  const systemPrompt = "You are an expert editor. Create engaging headlines. Respond only with valid JSON.";
-  const result = await callClaude(prompt, systemPrompt);
-  const parsed = JSON.parse(result);
-  return { editedTitle: parsed.headline, editedSummary: parsed.description };
-}
-
-// Main handler
+// Main handler - No auth required for frontend usage
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = authHeader?.replace("Bearer ", "");
-  const isDev = process.env.NODE_ENV === "development";
-
-  if (!isDev && cronSecret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
     // Fetch pending articles
     const { data: pendingArticles, error: fetchError } = await getSupabaseAdmin()
@@ -117,18 +70,21 @@ export async function POST(request: NextRequest) {
       const originalSummary = article.original_summary || article.summary;
 
       try {
-        // Translate
-        const translatedText = await translatorAgent(originalTitle, originalSummary);
+        // Translate title
+        const jaTitle = await translateWithDeepL(originalTitle);
+
+        // Translate summary
+        const jaSummary = await translateWithDeepL(originalSummary);
 
         // Edit
-        const edited = await editorAgent(translatedText.jaTitle, translatedText.jaSummary);
+        const edited = editorAgent(jaTitle, jaSummary);
 
         // Update in database
         await getSupabaseAdmin()
           .from("ai_news")
           .update({
-            title: edited.editedTitle || translatedText.jaTitle,
-            summary: edited.editedSummary || translatedText.jaSummary,
+            title: edited.editedTitle || jaTitle,
+            summary: edited.editedSummary || jaSummary,
             translation_status: "completed",
           })
           .eq("id", article.id);
@@ -138,11 +94,11 @@ export async function POST(request: NextRequest) {
         const errorMsg = error instanceof Error ? error.message : "Unknown error";
         console.error(`Failed to translate article ${article.id}:`, errorMsg);
 
-        // If still insufficient credits, stop here
-        if (errorMsg === "INSUFFICIENT_CREDITS") {
+        // If quota exceeded, stop here
+        if (errorMsg === "DEEPL_QUOTA_EXCEEDED") {
           return NextResponse.json({
             success: false,
-            error: "Insufficient credits",
+            error: "Quota exceeded",
             translated: translated.length,
             remaining: pendingArticles.length - translated.length,
           });
