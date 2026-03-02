@@ -155,9 +155,9 @@ Respond in JSON format:
       console.warn("Claude credits exhausted, marking for retry later");
       return { jaTitle: title, jaSummary: summary, provider: "none", needsRetry: true };
     }
-    // Other errors - fallback to English
-    console.warn("Claude translation failed, using English:", errorMsg);
-    return { jaTitle: title, jaSummary: summary, provider: "none", needsRetry: false };
+    // JSON parse error or other failures - mark for retry (don't mark as completed with untranslated content)
+    console.warn("Claude translation failed, marking for retry:", errorMsg);
+    return { jaTitle: title, jaSummary: summary, provider: "none", needsRetry: true };
   }
 }
 
@@ -203,8 +203,9 @@ export async function POST(request: NextRequest) {
 
     const collectedArticles: AiNews[] = [];
     const translatorProviders: ("claude" | "none")[] = [];
+    const MAX_ARTICLES = 3;
 
-    for (const article of searchResults) {
+    for (const article of searchResults.slice(0, MAX_ARTICLES)) {
       // Agent 2: Reader - Check importance
       const analysis = await readerAgent(article);
 
