@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type AiNewsItem = {
@@ -116,6 +117,7 @@ export default function AINewsPage() {
       </header>
 
       {/* Category Filter */}
+      {/*}
       <div className="flex gap-2 mb-6 flex-wrap">
         {categories.map((cat) => (
           <button
@@ -131,6 +133,7 @@ export default function AINewsPage() {
           </button>
         ))}
       </div>
+      {*/}
 
       {/* Manual Collect Button */}
       <div className="mb-6 flex gap-3 items-center flex-wrap">
@@ -162,13 +165,18 @@ export default function AINewsPage() {
       ) : (
         <div className="space-y-4">
           {articles.map((article) => (
-            <article
+            <Link
               key={article.id}
-              className="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+              href={`/ai-news/${article.id}`}
+              className="block"
+            >
+            <article
+              className="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
+                    {/*
                     {article.translation_status === "pending" ? (
                       <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
                         未翻訳
@@ -189,6 +197,7 @@ export default function AINewsPage() {
                           ?.label || "その他"}
                       </span>
                     )}
+                    */}
                     <span className="text-xs text-slate-500">
                       {article.source_name}
                     </span>
@@ -213,6 +222,7 @@ export default function AINewsPage() {
                 </div>
               </div>
             </article>
+            </Link>
           ))}
         </div>
       )}

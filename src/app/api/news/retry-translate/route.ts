@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
     for (const article of pendingArticles) {
       const originalTitle = article.original_title || article.title;
       const originalSummary = article.original_summary || article.summary;
+      const originalContent = article.original_content;
 
       try {
         // Translate title
@@ -75,6 +76,12 @@ export async function POST(request: NextRequest) {
 
         // Translate summary
         const jaSummary = await translateWithDeepL(originalSummary);
+
+        // Translate full content
+        let contentJa = "";
+        if (originalContent) {
+          contentJa = await translateWithDeepL(originalContent);
+        }
 
         // Edit
         const edited = editorAgent(jaTitle, jaSummary);
@@ -85,6 +92,7 @@ export async function POST(request: NextRequest) {
           .update({
             title: edited.editedTitle || jaTitle,
             summary: edited.editedSummary || jaSummary,
+            content_ja: contentJa || undefined,
             translation_status: "completed",
           })
           .eq("id", article.id);

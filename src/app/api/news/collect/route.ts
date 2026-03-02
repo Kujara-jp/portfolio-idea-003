@@ -211,10 +211,24 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Translate full content for detail page
+      let contentJa = "";
+      const originalContent = article.content || "";
+      if (originalContent && !translated.needsRetry) {
+        try {
+          console.log("[Content Translator] Translating full content...");
+          contentJa = await translateWithDeepL(originalContent);
+          console.log("[Content Translator] Content translated, length:", contentJa.length);
+        } catch (error) {
+          console.warn("Content translation failed:", error instanceof Error ? error.message : "Unknown error");
+        }
+      }
+
       // Upsert to Supabase (skip if duplicate)
       const newsData: Omit<AiNews, "id"> = {
         title: editedTitle,
         summary: editedSummary,
+        content_ja: contentJa || undefined,
         source_url: article.url,
         source_name: new URL(article.url).hostname.replace("www.", ""),
         published_at: article.published_date || null,
@@ -223,6 +237,7 @@ export async function POST(request: NextRequest) {
         translation_status: translationStatus,
         original_title: translated.needsRetry ? article.title : undefined,
         original_summary: translated.needsRetry ? analysis.summary : undefined,
+        original_content: translated.needsRetry ? originalContent : undefined,
       };
 
       const { error } = await getSupabaseAdmin()
