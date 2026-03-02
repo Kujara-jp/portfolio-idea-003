@@ -17,7 +17,11 @@ interface TavilySearchResult {
 async function callClaude(prompt: string, systemPrompt?: string): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
+  console.log("[Claude API] API Key present:", !!apiKey);
+  console.log("[Claude API] API Key prefix:", apiKey ? apiKey.substring(0, 8) + "..." : "NONE");
+
   if (!apiKey) {
+    console.error("[Claude API] ERROR: Anthropic API key not configured");
     throw new Error("Anthropic API key not configured");
   }
 
@@ -26,6 +30,8 @@ async function callClaude(prompt: string, systemPrompt?: string): Promise<string
     messages.push({ role: "system", content: systemPrompt });
   }
   messages.push({ role: "user", content: prompt });
+
+  console.log("[Claude API] Making request with model: claude-sonnet-4-20250514");
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -41,8 +47,12 @@ async function callClaude(prompt: string, systemPrompt?: string): Promise<string
     }),
   });
 
+  console.log("[Claude API] Response status:", response.status);
+  console.log("[Claude API] Response statusText:", response.statusText);
+
   if (!response.ok) {
     const error = await response.text();
+    console.error("[Claude API] ERROR response:", error);
     // Check for insufficient credits error
     if (error.includes("insufficient_quota") || error.includes("rate_limit") || error.includes("credit")) {
       throw new Error("INSUFFICIENT_CREDITS");
@@ -51,7 +61,14 @@ async function callClaude(prompt: string, systemPrompt?: string): Promise<string
   }
 
   const data = await response.json();
-  return data.content?.[0]?.text || "";
+  console.log("[Claude API] Response data keys:", Object.keys(data));
+  console.log("[Claude API] Content present:", !!data.content);
+
+  const result = data.content?.[0]?.text || "";
+  console.log("[Claude API] Result length:", result.length);
+  console.log("[Claude API] Result preview:", result.substring(0, 100));
+
+  return result;
 }
 
 // Tavily search
@@ -132,6 +149,8 @@ async function translatorAgent(title: string, summary: string): Promise<{
   provider: "claude" | "none";
   needsRetry: boolean;
 }> {
+  console.log("[TranslatorAgent] Starting translation for:", title.substring(0, 50));
+
   const prompt = `
 Translate the following to Japanese. Keep the meaning accurate and natural.
 
@@ -144,19 +163,30 @@ Respond in JSON format:
 
   // Try Claude for translation
   try {
-    const systemPrompt = "You are a professional translator. Translate accurately to Japanese. Respond only with valid JSON.";
+    console.log("[TranslatorAgent] Calling Claude API...");
     const result = await callClaude(prompt);
+
+    console.log("[TranslatorAgent] Raw result:", result);
+
+    // Check if result is empty
+    if (!result || result.trim() === "") {
+      console.error("[TranslatorAgent] ERROR: Empty response from Claude");
+      return { jaTitle: title, jaSummary: summary, provider: "none", needsRetry: true };
+    }
+
     const parsed = JSON.parse(result);
+    console.log("[TranslatorAgent] Parsed successfully:", parsed);
     return { ...parsed, provider: "claude", needsRetry: false };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    console.error("[TranslatorAgent] ERROR:", errorMsg);
     // Check for insufficient credits - mark for retry later
     if (errorMsg === "INSUFFICIENT_CREDITS") {
-      console.warn("Claude credits exhausted, marking for retry later");
+      console.warn("[TranslatorAgent] Claude credits exhausted, marking for retry later");
       return { jaTitle: title, jaSummary: summary, provider: "none", needsRetry: true };
     }
     // JSON parse error or other failures - mark for retry (don't mark as completed with untranslated content)
-    console.warn("Claude translation failed, marking for retry:", errorMsg);
+    console.warn("[TranslatorAgent] Claude translation failed, marking for retry:", errorMsg);
     return { jaTitle: title, jaSummary: summary, provider: "none", needsRetry: true };
   }
 }
