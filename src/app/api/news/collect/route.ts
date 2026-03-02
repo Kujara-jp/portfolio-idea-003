@@ -192,6 +192,9 @@ async function editorAgent(title: string, summary: string): Promise<string> {
 
 // Main handler
 export async function POST(request: NextRequest) {
+  console.log("[Collect] Starting news collection...");
+  console.log("[Collect] TAVILY_API_KEY present:", !!process.env.TAVILY_API_KEY);
+  console.log("[Collect] DEEPL_API_KEY present:", !!process.env.DEEPL_API_KEY);
   // Verify CRON_SECRET
   const authHeader = request.headers.get("authorization");
   const cronSecret = authHeader?.replace("Bearer ", "");
@@ -204,7 +207,9 @@ export async function POST(request: NextRequest) {
 
   try {
     // Agent 1: Search
+    console.log("[Collect] Calling searchAgent...");
     const searchResults = await searchAgent();
+    console.log("[Collect] Search results count:", searchResults.length);
 
     const collectedArticles: AiNews[] = [];
     const translatorProviders: ("deepl" | "none")[] = [];
