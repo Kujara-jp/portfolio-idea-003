@@ -71,7 +71,7 @@ async function searchAINews(query: string): Promise<TavilySearchResult[]> {
       api_key: apiKey,
       query,
       max_results: 3,
-      search_depth: "comprehensive",
+      search_depth: "basic",
       include_answer: false,
       include_raw_content: true,
     }),
