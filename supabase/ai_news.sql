@@ -10,7 +10,10 @@ create table ai_news (
   source_name text,
   published_at timestamp with time zone,
   collected_at timestamp with time zone default now(),
-  category text default 'other'
+  category text default 'other',
+  translation_status text default 'completed' check (translation_status in ('pending', 'completed')),
+  original_title text,
+  original_summary text
 );
 
 -- Enable RLS (Row Level Security)
@@ -19,6 +22,7 @@ alter row level security;
 -- Create index table ai_news enable for faster queries
 create index idx_ai_news_collected_at on ai_news(collected_at desc);
 create index idx_ai_news_category on ai_news(category);
+create index idx_ai_news_translation_status on ai_news(translation_status);
 
 -- RLS Policy: Allow public read access
 create policy "Allow public read access to ai_news"

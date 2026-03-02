@@ -12,50 +12,20 @@ interface TavilySearchResult {
   score: number;
 }
 
-// MiniMax API call
-async function callMiniMax(prompt: string, systemPrompt: string): Promise<string> {
-  const apiKey = process.env.MINIMAX_API_KEY;
-  const groupId = process.env.MINIMAX_GROUP_ID;
-
-  if (!apiKey || !groupId) {
-    throw new Error("MiniMax credentials not configured");
-  }
-
-  const response = await fetch(
-    `https://api.minimax.chat/v1/text/chatcompletion_v2?GroupId=${groupId}`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "MiniMax-Text-01",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.7,
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`MiniMax API error: ${error}`);
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
-}
 
 // Claude API call for translation
-async function callClaude(prompt: string): Promise<string> {
+async function callClaude(prompt: string, systemPrompt?: string): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
   if (!apiKey) {
     throw new Error("Anthropic API key not configured");
   }
+
+  const messages = [];
+  if (systemPrompt) {
+    messages.push({ role: "system", content: systemPrompt });
+  }
+  messages.push({ role: "user", content: prompt });
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -67,12 +37,16 @@ async function callClaude(prompt: string): Promise<string> {
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1024,
-      messages: [{ role: "user", content: prompt }],
+      messages,
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
+    // Check for insufficient credits error
+    if (error.includes("insufficient_quota") || error.includes("rate_limit") || error.includes("credit")) {
+      throw new Error("INSUFFICIENT_CREDITS");
+    }
     throw new Error(`Claude API error: ${error}`);
   }
 
@@ -140,20 +114,23 @@ Respond in JSON format:
 `;
 
   const systemPrompt = "You are an expert AI news analyst. Respond only with valid JSON.";
-  const result = await callMiniMax(prompt, systemPrompt);
 
   try {
+    const result = await callClaude(prompt, systemPrompt);
     return JSON.parse(result);
-  } catch {
+  } catch (error) {
+    console.warn("Reader agent failed, using fallback:", error instanceof Error ? error.message : "Unknown error");
     // Default fallback if parsing fails
     return { isImportant: true, category: "other", summary: article.content?.slice(0, 200) || "" };
   }
 }
 
-// Agent 3: Translator Agent - Translate to Japanese
+// Agent 3: Translator Agent - Translate to Japanese (Claude → pending fallback)
 async function translatorAgent(title: string, summary: string): Promise<{
   jaTitle: string;
   jaSummary: string;
+  provider: "claude" | "none";
+  needsRetry: boolean;
 }> {
   const prompt = `
 Translate the following to Japanese. Keep the meaning accurate and natural.
@@ -165,14 +142,22 @@ Respond in JSON format:
 {"jaTitle": "...", "jaSummary": "..."}
 `;
 
-  const systemPrompt = "You are a professional translator. Translate accurately to Japanese. Respond only with valid JSON.";
-  const result = await callClaude(prompt);
-
+  // Try Claude for translation
   try {
-    return JSON.parse(result);
-  } catch {
-    // Default fallback
-    return { jaTitle: title, jaSummary: summary };
+    const systemPrompt = "You are a professional translator. Translate accurately to Japanese. Respond only with valid JSON.";
+    const result = await callClaude(prompt);
+    const parsed = JSON.parse(result);
+    return { ...parsed, provider: "claude", needsRetry: false };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    // Check for insufficient credits - mark for retry later
+    if (errorMsg === "INSUFFICIENT_CREDITS") {
+      console.warn("Claude credits exhausted, marking for retry later");
+      return { jaTitle: title, jaSummary: summary, provider: "none", needsRetry: true };
+    }
+    // Other errors - fallback to English
+    console.warn("Claude translation failed, using English:", errorMsg);
+    return { jaTitle: title, jaSummary: summary, provider: "none", needsRetry: false };
   }
 }
 
@@ -189,12 +174,13 @@ Respond in JSON format:
 `;
 
   const systemPrompt = "You are an expert editor. Create engaging headlines. Respond only with valid JSON.";
-  const result = await callMiniMax(prompt, systemPrompt);
 
   try {
+    const result = await callClaude(prompt, systemPrompt);
     const parsed = JSON.parse(result);
     return `${parsed.headline}\n${parsed.description}`;
-  } catch {
+  } catch (error) {
+    console.warn("Editor agent failed, using original text:", error instanceof Error ? error.message : "Unknown error");
     return `${title}\n${summary}`;
   }
 }
@@ -204,8 +190,10 @@ export async function POST(request: NextRequest) {
   // Verify CRON_SECRET
   const authHeader = request.headers.get("authorization");
   const cronSecret = authHeader?.replace("Bearer ", "");
+  const isDev = process.env.NODE_ENV === "development";
 
-  if (cronSecret !== CRON_SECRET) {
+  // Allow in development mode or with valid CRON_SECRET
+  if (!isDev && cronSecret !== CRON_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -214,6 +202,7 @@ export async function POST(request: NextRequest) {
     const searchResults = await searchAgent();
 
     const collectedArticles: AiNews[] = [];
+    const translatorProviders: ("claude" | "none")[] = [];
 
     for (const article of searchResults) {
       // Agent 2: Reader - Check importance
@@ -228,20 +217,39 @@ export async function POST(request: NextRequest) {
         article.title,
         analysis.summary
       );
+      console.log(`[Translator] Used: ${translated.provider.toUpperCase()}, needsRetry: ${translated.needsRetry}`);
+      translatorProviders.push(translated.provider);
 
-      // Agent 4: Editor
-      const edited = await editorAgent(translated.jaTitle, translated.jaSummary);
-      const [editedTitle, editedSummary] = edited.split("\n");
+      // Determine translation status
+      const translationStatus = translated.needsRetry ? "pending" : "completed";
+
+      // Agent 4: Editor (only if translation succeeded)
+      let editedTitle = translated.jaTitle;
+      let editedSummary = translated.jaSummary;
+
+      if (!translated.needsRetry) {
+        try {
+          const edited = await editorAgent(translated.jaTitle, translated.jaSummary);
+          const [title, summary] = edited.split("\n");
+          editedTitle = title || translated.jaTitle;
+          editedSummary = summary || translated.jaSummary;
+        } catch (e) {
+          console.warn("Editor agent failed, using translated text");
+        }
+      }
 
       // Upsert to Supabase (skip if duplicate)
       const newsData: Omit<AiNews, "id"> = {
-        title: editedTitle || translated.jaTitle,
-        summary: editedSummary || translated.jaSummary,
+        title: editedTitle,
+        summary: editedSummary,
         source_url: article.url,
         source_name: new URL(article.url).hostname.replace("www.", ""),
         published_at: article.published_date || null,
         collected_at: new Date().toISOString(),
         category: analysis.category || "other",
+        translation_status: translationStatus,
+        original_title: translated.needsRetry ? article.title : undefined,
+        original_summary: translated.needsRetry ? analysis.summary : undefined,
       };
 
       const { error } = await getSupabaseAdmin()
@@ -257,6 +265,7 @@ export async function POST(request: NextRequest) {
       success: true,
       collected: collectedArticles.length,
       articles: collectedArticles,
+      translatorProvider: translatorProviders[0] || "unknown",
     });
   } catch (error) {
     console.error("Error collecting news:", error);

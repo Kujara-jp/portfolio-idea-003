@@ -11,6 +11,7 @@ type AiNewsItem = {
   published_at: string | null;
   collected_at: string;
   category: string;
+  translation_status?: "pending" | "completed";
 };
 
 const categories = [
@@ -26,6 +27,8 @@ export default function AINewsPage() {
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState("all");
   const [collecting, setCollecting] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
 
   const fetchNews = async (cat: string) => {
     setLoading(true);
@@ -34,6 +37,11 @@ export default function AINewsPage() {
       const res = await fetch(url);
       const data = await res.json();
       setArticles(data.articles || []);
+
+      // Fetch pending count
+      const pendingRes = await fetch("/api/news/list?status=pending");
+      const pendingData = await pendingRes.json();
+      setPendingCount(pendingData.total || 0);
     } catch (error) {
       console.error("Error fetching news:", error);
     } finally {
@@ -48,13 +56,42 @@ export default function AINewsPage() {
   const handleManualCollect = async () => {
     setCollecting(true);
     try {
-      // In production, this would use the CRON_SECRET
-      // For now, we'll just refresh the list
+      // Call the collect API
+      const res = await fetch("/api/news/collect", {
+        method: "POST",
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to collect news");
+      }
+
+      // Refresh the list after collecting
       await fetchNews(category);
     } catch (error) {
       console.error("Error collecting news:", error);
     } finally {
       setCollecting(false);
+    }
+  };
+
+  const handleRetryTranslate = async () => {
+    setRetrying(true);
+    try {
+      const res = await fetch("/api/news/retry-translate", {
+        method: "POST",
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        alert(`${data.translated}件の翻訳が完了しました`);
+        await fetchNews(category);
+      } else {
+        alert(`エラー: ${data.error}`);
+      }
+    } catch (error) {
+      console.error("Error retrying translation:", error);
+    } finally {
+      setRetrying(false);
     }
   };
 
@@ -96,7 +133,7 @@ export default function AINewsPage() {
       </div>
 
       {/* Manual Collect Button */}
-      <div className="mb-6">
+      <div className="mb-6 flex gap-3 items-center flex-wrap">
         <button
           onClick={handleManualCollect}
           disabled={collecting}
@@ -104,6 +141,15 @@ export default function AINewsPage() {
         >
           {collecting ? "更新中..." : "更新"}
         </button>
+        {pendingCount > 0 && (
+          <button
+            onClick={handleRetryTranslate}
+            disabled={retrying}
+            className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50"
+          >
+            {retrying ? "翻訳中..." : `未翻訳(${pendingCount})を再翻訳`}
+          </button>
+        )}
       </div>
 
       {/* News List */}
@@ -123,20 +169,26 @@ export default function AINewsPage() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
-                    <span
-                      className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                        article.category === "model"
-                          ? "bg-blue-100 text-blue-700"
-                          : article.category === "tool"
-                          ? "bg-green-100 text-green-700"
-                          : article.category === "research"
-                          ? "bg-purple-100 text-purple-700"
-                          : "bg-slate-100 text-slate-700"
-                      }`}
-                    >
-                      {categories.find((c) => c.value === article.category)
-                        ?.label || "その他"}
-                    </span>
+                    {article.translation_status === "pending" ? (
+                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
+                        未翻訳
+                      </span>
+                    ) : (
+                      <span
+                        className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                          article.category === "model"
+                            ? "bg-blue-100 text-blue-700"
+                            : article.category === "tool"
+                            ? "bg-green-100 text-green-700"
+                            : article.category === "research"
+                            ? "bg-purple-100 text-purple-700"
+                            : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {categories.find((c) => c.value === article.category)
+                          ?.label || "その他"}
+                      </span>
+                    )}
                     <span className="text-xs text-slate-500">
                       {article.source_name}
                     </span>

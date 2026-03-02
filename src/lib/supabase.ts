@@ -61,4 +61,7 @@ export type AiNews = {
   published_at: string | null;
   collected_at: string;
   category: string;
+  translation_status?: "pending" | "completed";
+  original_title?: string;
+  original_summary?: string;
 };
