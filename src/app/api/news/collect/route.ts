@@ -90,6 +90,8 @@ async function searchAINews(query: string): Promise<TavilySearchResult[]> {
 async function extractArticleContent(url: string): Promise<string> {
   const apiKey = process.env.TAVILY_API_KEY;
 
+  console.log("[Extract] Starting extraction for:", url);
+
   if (!apiKey) {
     throw new Error("Tavily API key not configured");
   }
@@ -105,17 +107,28 @@ async function extractArticleContent(url: string): Promise<string> {
     }),
   });
 
+  console.log("[Extract] Response status:", response.status);
+
   if (!response.ok) {
     const error = await response.text();
-    console.warn("Tavily extract error:", error);
+    console.warn("[Extract] Error response:", error);
     return "";
   }
 
   const data = await response.json();
+  console.log("[Extract] Response data:", JSON.stringify(data).substring(0, 500));
+
   const results = data.results || [];
+  console.log("[Extract] Results count:", results.length);
+
   if (results.length > 0 && results[0].content) {
+    const contentLength = results[0].content.length;
+    console.log("[Extract] Content length:", contentLength);
+    console.log("[Extract] Content preview:", results[0].content.substring(0, 200));
     return results[0].content;
   }
+
+  console.log("[Extract] No content found in results");
   return "";
 }
 
@@ -261,10 +274,15 @@ export async function POST(request: NextRequest) {
 
       // Translate full content for detail page
       let contentJa = "";
+      console.log("[Collect] originalContent length:", originalContent.length);
+      console.log("[Collect] translated.needsRetry:", translated.needsRetry);
+
       if (originalContent && !translated.needsRetry) {
         try {
           console.log("[Content Translator] Translating full content...");
+          console.log("[Content Translator] originalContent preview:", originalContent.substring(0, 200));
           contentJa = await translateWithDeepL(originalContent);
+          console.log("[Content Translator] contentJa length:", contentJa.length);
           console.log("[Content Translator] Content translated, length:", contentJa.length);
         } catch (error) {
           console.warn("Content translation failed:", error instanceof Error ? error.message : "Unknown error");
