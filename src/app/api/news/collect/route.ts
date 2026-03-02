@@ -86,6 +86,39 @@ async function searchAINews(query: string): Promise<TavilySearchResult[]> {
   return data.results || [];
 }
 
+// Tavily extract - Get full article content from URL
+async function extractArticleContent(url: string): Promise<string> {
+  const apiKey = process.env.TAVILY_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("Tavily API key not configured");
+  }
+
+  const response = await fetch("https://api.tavily.com/extract", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      api_key: apiKey,
+      urls: [url],
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.warn("Tavily extract error:", error);
+    return "";
+  }
+
+  const data = await response.json();
+  const results = data.results || [];
+  if (results.length > 0 && results[0].content) {
+    return results[0].content;
+  }
+  return "";
+}
+
 // Agent 1: Search Agent - Search for AI news
 async function searchAgent(): Promise<TavilySearchResult[]> {
   const results = await searchAINews("latest artificial intelligence news 2026");
@@ -185,6 +218,16 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // Extract full article content
+      let originalContent = "";
+      try {
+        console.log("[Extract] Getting full content from:", article.url);
+        originalContent = await extractArticleContent(article.url);
+        console.log("[Extract] Extracted content length:", originalContent.length);
+      } catch (error) {
+        console.warn("Content extraction failed:", error instanceof Error ? error.message : "Unknown error");
+      }
+
       // Agent 3: Translator
       const translated = await translatorAgent(
         article.title,
@@ -213,7 +256,6 @@ export async function POST(request: NextRequest) {
 
       // Translate full content for detail page
       let contentJa = "";
-      const originalContent = article.content || "";
       if (originalContent && !translated.needsRetry) {
         try {
           console.log("[Content Translator] Translating full content...");
