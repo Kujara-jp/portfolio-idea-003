@@ -243,7 +243,8 @@ export async function POST(request: NextRequest) {
         originalContent = await extractArticleContent(article.url);
         console.log("[Extract] Extracted content length:", originalContent.length);
       } catch (error) {
-        console.warn("Content extraction failed:", error instanceof Error ? error.message : "Unknown error");
+        console.error("[Extract] ERROR:", error instanceof Error ? error.message : "Unknown error");
+        originalContent = ""; // Reset to empty on error
       }
 
       // Agent 3: Translator
