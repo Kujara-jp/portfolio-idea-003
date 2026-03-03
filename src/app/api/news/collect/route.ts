@@ -207,8 +207,10 @@ export async function POST(request: NextRequest) {
   console.log("[Collect] TAVILY_API_KEY present:", !!process.env.TAVILY_API_KEY);
   console.log("[Collect] DEEPL_API_KEY present:", !!process.env.DEEPL_API_KEY);
 
-  // Verify Cron Job request using x-vercel-signature
-  // Vercel Cron Jobs send x-vercel-signature header with HMAC SHA-256 signature
+  // Verify Cron Job request
+  // Supports two authentication methods:
+  // 1. Vercel Cron Job: x-vercel-signature header with HMAC SHA-256 verification
+  // 2. Manual execution: Authorization header with Bearer token
   const cronSecret = process.env.CRON_SECRET;
   const isDev = process.env.NODE_ENV === "development";
 
@@ -219,32 +221,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const signature = request.headers.get("x-vercel-signature");
-    console.log("[Collect] x-vercel-signature present:", !!signature);
+    const vercelSignature = request.headers.get("x-vercel-signature");
+    const authHeader = request.headers.get("authorization");
+    const bearerToken = authHeader?.replace("Bearer ", "");
 
-    if (!signature) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    console.log("[Collect] x-vercel-signature present:", !!vercelSignature);
+    console.log("[Collect] Authorization present:", !!authHeader);
+
+    let isValidAuth = false;
+
+    // Method 1: Vercel Cron Job - verify x-vercel-signature
+    if (vercelSignature) {
+      const body = await request.text();
+      const expectedSignature = createHmac("sha256", cronSecret).update(body).digest("hex");
+      isValidAuth = vercelSignature === `sha256=${expectedSignature}`;
+      console.log("[Collect] Vercel Cron signature valid:", isValidAuth);
+
+      // Re-create Request object with the body we've already read
+      if (isValidAuth) {
+        request = new NextRequest(request.url, {
+          method: "POST",
+          headers: request.headers,
+          body: body,
+        });
+      }
+    }
+    // Method 2: Manual execution - verify Authorization Bearer token
+    else if (bearerToken) {
+      isValidAuth = bearerToken === cronSecret;
+      console.log("[Collect] Manual auth valid:", isValidAuth);
     }
 
-    // Read body for signature verification
-    const body = await request.text();
-
-    // Verify HMAC SHA-256 signature
-    const expectedSignature = createHmac("sha256", cronSecret).update(body).digest("hex");
-    const isValidSignature = signature === `sha256=${expectedSignature}`;
-
-    console.log("[Collect] Signature valid:", isValidSignature);
-
-    if (!isValidSignature) {
+    if (!isValidAuth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    // Re-create Request object with the body we've already read
-    request = new NextRequest(request.url, {
-      method: "POST",
-      headers: request.headers,
-      body: body,
-    });
   }
 
   try {
