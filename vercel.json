@@ -1,19 +1,7 @@
 {
   "crons": [
-    {
-      "path": "/api/news/collect",
-      "schedule": "0 22 * * *",
-      "origin": "1"
-    },
-    {
-      "path": "/api/news/collect",
-      "schedule": "0 4 * * *",
-      "origin": "1"
-    },
-    {
-      "path": "/api/news/collect",
-      "schedule": "0 10 * * *",
-      "origin": "1"
-    }
+    { "path": "/api/news/collect", "schedule": "0 22 * * *" },
+    { "path": "/api/news/collect", "schedule": "0 4 * * *" },
+    { "path": "/api/news/collect", "schedule": "0 10 * * *" }
   ]
 }

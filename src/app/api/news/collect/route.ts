@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHmac } from "crypto";
 import { getSupabaseAdmin, AiNews } from "@/lib/supabase";
 
 interface TavilySearchResult {
@@ -205,14 +206,45 @@ export async function POST(request: NextRequest) {
   console.log("[Collect] Starting news collection...");
   console.log("[Collect] TAVILY_API_KEY present:", !!process.env.TAVILY_API_KEY);
   console.log("[Collect] DEEPL_API_KEY present:", !!process.env.DEEPL_API_KEY);
-  // Verify Cron Job request
-  // Vercel Cron Jobs send x-vercel-id header when origin=1 is set in vercel.json
-  const vercelIdHeader = request.headers.get("x-vercel-id");
+
+  // Verify Cron Job request using x-vercel-signature
+  // Vercel Cron Jobs send x-vercel-signature header with HMAC SHA-256 signature
+  const cronSecret = process.env.CRON_SECRET;
   const isDev = process.env.NODE_ENV === "development";
 
-  // Allow in development mode or with valid Vercel Cron request
-  if (!isDev && !vercelIdHeader) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Development mode allows direct access
+  if (!isDev) {
+    if (!cronSecret) {
+      console.error("[Collect] CRON_SECRET not configured");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const signature = request.headers.get("x-vercel-signature");
+    console.log("[Collect] x-vercel-signature present:", !!signature);
+
+    if (!signature) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Read body for signature verification
+    const body = await request.text();
+
+    // Verify HMAC SHA-256 signature
+    const expectedSignature = createHmac("sha256", cronSecret).update(body).digest("hex");
+    const isValidSignature = signature === `sha256=${expectedSignature}`;
+
+    console.log("[Collect] Signature valid:", isValidSignature);
+
+    if (!isValidSignature) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Re-create Request object with the body we've already read
+    request = new NextRequest(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body: body,
+    });
   }
 
   try {
