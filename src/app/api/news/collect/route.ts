@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin, AiNews } from "@/lib/supabase";
 
-// CRON_SECRET check
-const CRON_SECRET = process.env.CRON_SECRET;
-
 interface TavilySearchResult {
   title: string;
   url: string;
@@ -208,13 +205,13 @@ export async function POST(request: NextRequest) {
   console.log("[Collect] Starting news collection...");
   console.log("[Collect] TAVILY_API_KEY present:", !!process.env.TAVILY_API_KEY);
   console.log("[Collect] DEEPL_API_KEY present:", !!process.env.DEEPL_API_KEY);
-  // Verify CRON_SECRET
-  const authHeader = request.headers.get("authorization");
-  const cronSecret = authHeader?.replace("Bearer ", "");
+  // Verify Cron Job request
+  // Vercel Cron Jobs send x-vercel-id header when origin=1 is set in vercel.json
+  const vercelIdHeader = request.headers.get("x-vercel-id");
   const isDev = process.env.NODE_ENV === "development";
 
-  // Allow in development mode or with valid CRON_SECRET
-  if (!isDev && cronSecret !== CRON_SECRET) {
+  // Allow in development mode or with valid Vercel Cron request
+  if (!isDev && !vercelIdHeader) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
