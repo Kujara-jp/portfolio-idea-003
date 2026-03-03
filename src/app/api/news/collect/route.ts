@@ -352,7 +352,7 @@ export async function POST(request: NextRequest) {
 
       const { error } = await getSupabaseAdmin()
         .from("ai_news")
-        .upsert(newsData, { onConflict: "source_url", upsert: true });
+        .upsert(newsData, { onConflict: "source_url" });
 
       if (!error) {
         collectedArticles.push({ id: "", ...newsData });
