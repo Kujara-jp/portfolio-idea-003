@@ -233,9 +233,12 @@ export async function POST(request: NextRequest) {
     // Method 1: Vercel Cron Job - verify x-vercel-signature
     if (vercelSignature) {
       const body = await request.text();
+      console.log("[Collect] Vercel Cron body:", body);
       const expectedSignature = createHmac("sha256", cronSecret).update(body).digest("hex");
       isValidAuth = vercelSignature === `sha256=${expectedSignature}`;
       console.log("[Collect] Vercel Cron signature valid:", isValidAuth);
+      console.log("[Collect] Expected signature:", `sha256=${expectedSignature}`);
+      console.log("[Collect] Got signature:", vercelSignature);
 
       // Re-create Request object with the body we've already read
       if (isValidAuth) {
@@ -256,6 +259,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   }
+
+  console.log("[Collect] Authentication passed, starting news collection...");
 
   try {
     // Agent 1: Search
