@@ -345,14 +345,14 @@ export async function POST(request: NextRequest) {
         collected_at: new Date().toISOString(),
         category: analysis.category || "other",
         translation_status: translationStatus,
-        original_title: translated.needsRetry ? article.title : undefined,
-        original_summary: translated.needsRetry ? analysis.summary : undefined,
-        original_content: translated.needsRetry ? originalContent : undefined,
+        original_title: article.title,
+        original_summary: analysis.summary,
+        original_content: originalContent,
       };
 
       const { error } = await getSupabaseAdmin()
         .from("ai_news")
-        .upsert(newsData, { onConflict: "source_url" });
+        .upsert(newsData, { onConflict: "source_url", upsert: true });
 
       if (!error) {
         collectedArticles.push({ id: "", ...newsData });
