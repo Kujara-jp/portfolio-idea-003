@@ -118,6 +118,9 @@ export default function AINewsDetailPage({
         >
           元記事 →
         </a>
+        <p className="text-xs text-slate-400 mt-1">
+          この要約はAIが自動生成したものです。詳細は元記事をご確認ください。
+        </p>
       </header>
 
       {/* Full Content */}
@@ -133,7 +136,7 @@ export default function AINewsDetailPage({
       ) : (
         <div className="bg-white border border-slate-200 rounded-lg p-6 text-slate-700">
           <h2 className="text-lg font-semibold text-slate-900 mb-3">
-            あらすじ
+            AI要約
           </h2>
           <p className="whitespace-pre-wrap">{article.summary}</p>
         </div>
