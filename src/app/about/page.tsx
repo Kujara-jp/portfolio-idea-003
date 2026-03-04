@@ -43,14 +43,14 @@ export default function AboutPage() {
   return (
     <div className="space-y-10">
       {/* ── ヒーロー ── */}
-      <section className="rounded-2xl bg-slate-900 px-8 py-12 text-white sm:px-12 sm:py-16">
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-400">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
           自己紹介
         </p>
-        <h1 className="mt-4 text-3xl font-semibold leading-snug tracking-tight sm:text-4xl">
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
           製造業の現場経験を持つ、AI活用型の業務改善エンジニア
         </h1>
-        <div className="mt-6 max-w-2xl space-y-4 text-base leading-relaxed text-slate-200">
+        <div className="mt-3 space-y-3 text-base text-slate-700">
           <p>
             製造業での現場経験を通じて、手作業によるミスや属人化しやすい業務の課題を肌で感じてきました。その経験から「整理して、仕組み化して、運用まで考える」というアプローチでDX推進に取り組んでいます。
           </p>
@@ -58,7 +58,7 @@ export default function AboutPage() {
             独学でNext.js・TypeScript・Supabase・GASを習得し、AIツールを活用した開発（バイブコーディング）を実践。複数のAIサービスを組み合わせたAgent
             Teams構成による自動化システムの構築まで手がけています。
           </p>
-          <p className="text-slate-300">
+          <p className="text-slate-500">
             関西在住。リモート・通勤いずれも対応可能です。
           </p>
         </div>
@@ -99,7 +99,7 @@ export default function AboutPage() {
           href="https://github.com/Kujara-jp"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-700"
+          className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-6 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
         >
           <svg
             className="h-4 w-4"
