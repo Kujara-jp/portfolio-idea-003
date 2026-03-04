@@ -97,7 +97,20 @@ export default async function HomePage() {
             </p>
           </Link>
         </div>
-        <p className="mt-4 text-sm text-slate-600">デモの詳細な閲覧方法は、応募時に必要に応じてご案内します。</p>
+        <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <h3 className="text-sm font-semibold text-slate-900">📋 デモアカウント</h3>
+          {/* TODO: デモアカウント情報を設定 */}
+          <dl className="mt-2 space-y-1 text-sm text-slate-600">
+            <div className="flex">
+              <dt className="w-20 flex-shrink-0">メール:</dt>
+              <dd>demo@helphub.example.com</dd>
+            </div>
+            <div className="flex">
+              <dt className="w-20 flex-shrink-0">パスワード:</dt>
+              <dd>demo1234</dd>
+            </div>
+          </dl>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">

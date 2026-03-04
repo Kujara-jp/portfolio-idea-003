@@ -1,0 +1,41 @@
+---
+slug: "ai-news-agent-teams"
+title: "AI News Agent Teams"
+summary: "複数AIエージェントで収集・翻訳・要約を自動化し、AIニュース監視の手作業負荷を下げる情報運用改善。"
+tags: ["nextjs", "typescript", "supabase", "automation", "ai"]
+featured: false
+repoUrl: ""
+demoUrl: "https://portfolio-idea-003.vercel.app/ai-news"
+date: "2026-03-04"
+---
+
+## 課題
+
+AI関連ニュースのウォッチは、情報収集・翻訳・要点整理を毎日手作業で行う必要があり、継続時の負荷が高かった。
+英語記事を都度読み解いて日本語で共有する運用は、担当者依存になりやすく、抜け漏れや粒度のばらつきも起きやすい状態だった。
+
+## アプローチ
+
+検索・翻訳・読解/編集をエージェント単位で分離し、役割ごとにAPIを使い分ける構成にした。
+Search Agent は Tavily API、Translation Agent は DeepL API、Reading / Editing Agent は MiniMax API を担当する。
+収集結果は Supabase に保存し、Vercel Cron Jobs で JST 07:00 / 13:00 / 19:00 の1日3回を自動実行することで、日次の手作業をなくした。
+
+## 技術
+
+- Next.js / TypeScript
+- Supabase
+- Tavily API（検索エージェント）
+- DeepL API（翻訳エージェント）
+- MiniMax API（読解・編集エージェント）
+- Vercel Cron Jobs（1日3回の定期実行）
+
+## 結果
+
+最新AIニュースの収集を自動化し、英語記事の日本語翻訳と要約生成までを一連フローで回せるようになった。
+記事詳細ページでAI要約を確認できるため、短時間でトレンド把握しやすくなり、定点観測の再現性が上がった。
+また、役割ごとに異なるLLM/APIを割り当てる設計により、品質とコストのバランスを取りながら運用できる土台を整えた。
+
+## 学び
+
+情報運用系の改善では、機能追加よりも「収集から共有までを止めずに回せる仕組み化」が効果につながりやすい。
+複数エージェントの責務分離は、コスト最適化と運用改善を両立する設計として有効だった。

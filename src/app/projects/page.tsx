@@ -18,7 +18,8 @@ export default async function ProjectsPage() {
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">作品一覧</h1>
         <p className="max-w-2xl text-slate-600">
-          作品データは <code>content/projects</code> の MDX ファイルから読み込んでいます。
+          業務改善や保守運用の視点を重視して取り組んだ制作例です。
+          各作品の詳細では、課題へのアプローチと結果음을まとめています。
         </p>
       </header>
 
