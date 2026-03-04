@@ -51,15 +51,18 @@ export default function AboutPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <h2 className="text-lg font-semibold tracking-tight text-slate-900">スキル・技術スタック</h2>
-        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {skills.map((skill) => (
-            <div key={skill.category}>
+            <div
+              key={skill.category}
+              className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+            >
               <h3 className="text-sm font-semibold text-slate-900">{skill.category}</h3>
-              <div className="mt-2 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
                 {skill.items.map((item) => (
                   <span
                     key={item}
-                    className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600"
+                    className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600"
                   >
                     {item}
                   </span>
@@ -72,19 +75,16 @@ export default function AboutPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <h2 className="text-lg font-semibold tracking-tight text-slate-900">リンク</h2>
-        <ul className="mt-4 space-y-2 text-sm text-slate-600">
-          <li>
-            GitHub:{" "}
-            <a
-              href="https://github.com/Kujara-jp"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-slate-700 hover:underline"
-            >
-              https://github.com/Kujara-jp
-            </a>
-          </li>
-        </ul>
+        <div className="mt-4">
+          <a
+            href="https://github.com/Kujara-jp"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            GitHub → Kujara-jp
+          </a>
+        </div>
       </section>
     </div>
   );
