@@ -30,6 +30,16 @@ const projectSummaries: Record<string, ProjectSummary> = {
     approach: "ファイルベースの MDX 運用で編集と公開の距離を最小化。",
     outcome: "修正反映が速くなり、運用コストを抑えた情報更新が可能になった。",
   },
+  "supplies-manager": {
+    problem: "備品情報が分散し、更新状況の判断基準が暗黙化して担当者依存になっていた。",
+    approach: "dashboard・list・createの最小構成に絞り、JSON永続化、item_code重複チェック、status自動算出、updated_at自動化を実装した。",
+    outcome: "状況の見える化と入力品質の安定化が進み、確認工数を抑えながら運用を標準化できるMVP基盤を作れた。",
+  },
+  "ai-news-agent-teams": {
+    problem: "AIニュースの収集・翻訳・要約を毎日手作業で回す必要があり、継続監視の負荷とばらつきが大きかった。",
+    approach: "検索・翻訳・読解/編集をエージェント分離し、Tavily・DeepL・MiniMaxを役割配分。Supabase保存とVercel Cron（JST 07:00 / 13:00 / 19:00）で定期実行を自動化した。",
+    outcome: "最新AIニュースの収集から日本語要約確認までを自動化し、手作業を減らしながらトレンド監視の再現性とコスト効率を高めた。",
+  },
 };
 
 function formatDate(date: string): string {

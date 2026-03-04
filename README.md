@@ -1,40 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Supplies Manager
 
-## Workflow
+## プロジェクト概要
+Supplies Manager は、社内備品管理の運用を整えるための **内部オペレーション / DX改善MVP** です。  
+散在・手作業・暗黙運用に寄りがちな備品トラッキングを、最小画面構成で可視化し、入力ルールを明文化することを目的に作成しました。  
 
-Development workflow is defined in `PLAN.md`. Read `PLAN.md` before making changes.
+現在フェーズでは、**MVPとして強い区切りで完了**しており、次フェーズ拡張（編集・履歴・権限など）に進める状態です。
 
-## Getting Started
+## 背景 / 解決したい課題
+- 備品情報がスプレッドシートやチャットなどに分散し、確認に時間がかかる
+- 在庫や状態判断が担当者依存で、運用ルールが暗黙化しやすい
+- 同一備品の重複登録や更新日時の入力ぶれが発生しやすい
 
-First, run the development server:
+このMVPでは、まず「見える化」と「入力品質の安定化」を優先し、運用の再現性を上げることに注力しています。
 
+## 現在できること
+- Next.js 新規アプリとして構築
+- 型定義とモックデータを用いた初期データ設計
+- JSONファイル永続化による Create + Read（登録・参照）
+- `item_code` の重複チェック
+- 登録情報に基づくステータス自動算出
+- `updated_at` の手入力廃止（自動管理）
+
+手動MVP検証（実施済み）:
+- `/supplies/new` から新規登録
+- 登録内容が `/supplies` 一覧に反映
+- 登録結果が `/` ダッシュボード集計に反映
+
+## 画面構成
+- `/` : ダッシュボード（件数・状態の集計表示）
+- `/supplies` : 備品一覧（登録済みデータの参照）
+- `/supplies/new` : 新規登録フォーム（入力 + バリデーション）
+
+## 技術構成
+- Next.js（App Router）
+- TypeScript
+- JSONファイル永続化（MVP段階の軽量ストレージ）
+- バリデーション（`item_code` 重複防止）
+- ステータス自動算出ロジック
+- `updated_at` 自動付与
+
+## ローカル起動方法
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+ブラウザで `http://localhost:3000` を開いて確認します。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 未実装 / 今後の改善
+- Update / Delete（編集・削除）
+- 入出庫や棚卸など運用フロー拡張
+- 履歴管理・監査ログ
+- 権限管理（閲覧 / 更新の分離）
+- CSV連携
+- JSONからDBへの移行
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## ポートフォリオ上の見せ方
+このプロジェクトは「CRUDを作った」ではなく、以下を示すMVPとして提示できます。
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- 業務課題起点: 分散管理・手作業・暗黙ルールをどこまで減らしたか
+- 運用設計の判断: まず `dashboard + list + create` に絞った理由
+- 品質担保の実装: `item_code` 重複防止、ステータス自動化、`updated_at` 自動管理
+- 段階的拡張前提: 小さく作って検証し、次フェーズに繋げる設計方針
