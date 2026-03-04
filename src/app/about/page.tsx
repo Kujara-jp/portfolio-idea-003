@@ -44,7 +44,7 @@ export default function AboutPage() {
     <div className="space-y-10">
       {/* ── ヒーロー ── */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
+        <p className="text-sm font-medium text-slate-500">
           自己紹介
         </p>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
@@ -66,7 +66,7 @@ export default function AboutPage() {
 
       {/* ── 技術スタック ── */}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
+        <p className="text-sm font-medium text-slate-500">
           技術スタック
         </p>
         <div className="mt-6 grid gap-6 sm:grid-cols-2">
