@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHmac } from "crypto";
 import { getSupabaseAdmin, AiNews } from "@/lib/supabase";
 
 interface TavilySearchResult {
@@ -207,67 +206,7 @@ export async function POST(request: NextRequest) {
   console.log("[Collect] TAVILY_API_KEY present:", !!process.env.TAVILY_API_KEY);
   console.log("[Collect] DEEPL_API_KEY present:", !!process.env.DEEPL_API_KEY);
 
-  // Verify Cron Job request
-  // Supports three authentication methods:
-  // 1. Vercel Cron Job: User-Agent "Vercel Cron" (no signature required)
-  // 2. Vercel Cron Job: x-vercel-signature header with HMAC SHA-256 verification
-  // 3. Manual execution: Authorization header with Bearer token
-  const cronSecret = process.env.CRON_SECRET;
-  const isDev = process.env.NODE_ENV === "development";
-  const userAgent = request.headers.get("user-agent") || "";
-
-  // Development mode allows direct access
-  if (!isDev) {
-    // Vercel Cron Job requests - skip authentication
-    if (userAgent === "Vercel Cron") {
-      console.log("[Collect] Vercel Cron request detected, skipping authentication");
-    } else {
-      if (!cronSecret) {
-        console.error("[Collect] CRON_SECRET not configured");
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-
-      const vercelSignature = request.headers.get("x-vercel-signature");
-      const authHeader = request.headers.get("authorization");
-      const bearerToken = authHeader?.replace("Bearer ", "");
-
-      console.log("[Collect] x-vercel-signature present:", !!vercelSignature);
-      console.log("[Collect] Authorization present:", !!authHeader);
-
-      let isValidAuth = false;
-
-      // Method 2: Vercel Cron Job - verify x-vercel-signature
-      if (vercelSignature) {
-        const body = await request.text();
-        console.log("[Collect] Vercel Cron body:", body);
-        const expectedSignature = createHmac("sha256", cronSecret).update(body).digest("hex");
-        isValidAuth = vercelSignature === `sha256=${expectedSignature}`;
-        console.log("[Collect] Vercel Cron signature valid:", isValidAuth);
-        console.log("[Collect] Expected signature:", `sha256=${expectedSignature}`);
-        console.log("[Collect] Got signature:", vercelSignature);
-
-        // Re-create Request object with the body we've already read
-        if (isValidAuth) {
-          request = new NextRequest(request.url, {
-            method: "POST",
-            headers: request.headers,
-            body: body,
-          });
-        }
-      }
-      // Method 3: Manual execution - verify Authorization Bearer token
-      else if (bearerToken) {
-        isValidAuth = bearerToken === cronSecret;
-        console.log("[Collect] Manual auth valid:", isValidAuth);
-      }
-
-      if (!isValidAuth) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-    }
-  }
-
-  console.log("[Collect] Authentication passed, starting news collection...");
+  // No authentication required - this endpoint only collects public news
 
   try {
     // Agent 1: Search
