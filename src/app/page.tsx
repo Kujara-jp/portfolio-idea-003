@@ -64,7 +64,7 @@ export default async function HomePage() {
         <p className="mt-2 text-sm text-slate-600">
           実際の画面や動作を通じて、業務改善の考え方と実装の方向性を確認できるようにしています。
         </p>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
           <Link
             href="https://helphub-pink.vercel.app/"
             target="_blank"
@@ -85,6 +85,15 @@ export default async function HomePage() {
             <h3 className="text-base font-semibold text-slate-900">抵抗値計算ツール（GAS）</h3>
             <p className="mt-2 text-sm text-slate-600">
               手作業計算の負荷とミスを減らすことを目的にした、現場改善向けの支援ツールです。
+            </p>
+          </Link>
+          <Link
+            href="/ai-news"
+            className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100"
+          >
+            <h3 className="text-base font-semibold text-slate-900">AIニュース自動収集エージェント</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              複数AIエージェントが協調し、最新AIニュースを自動収集・翻訳・要約する情報ワークフローです。
             </p>
           </Link>
         </div>
