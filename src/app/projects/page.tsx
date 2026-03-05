@@ -29,7 +29,9 @@ export default async function ProjectsPage() {
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
               公開日 {formatDate(project.date)}
             </p>
-            <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">{project.title}</h2>
+            <Link href={`/projects/${project.slug}`} className="mt-2 block text-xl font-semibold tracking-tight text-slate-900 hover:text-slate-600">
+              {project.title}
+            </Link>
             <p className="mt-2 text-sm leading-6 text-slate-600">{project.summary}</p>
             <p className="mt-3 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">タグ</p>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -42,12 +44,24 @@ export default async function ProjectsPage() {
                 </span>
               ))}
             </div>
-            <Link
-              href={`/projects/${project.slug}`}
-              className="mt-4 inline-block text-sm font-medium text-slate-700 hover:text-slate-900"
-            >
-              作品を見る
-            </Link>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link
+                href={`/projects/${project.slug}`}
+                className="inline-block text-sm font-medium text-slate-700 hover:text-slate-900"
+              >
+                詳細を見る
+              </Link>
+              {project.demoUrl && (
+                <a
+                  href={project.demoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-sm font-medium text-blue-600 hover:text-blue-800"
+                >
+                  デモを見る →
+                </a>
+              )}
+            </div>
           </article>
         ))}
       </div>
