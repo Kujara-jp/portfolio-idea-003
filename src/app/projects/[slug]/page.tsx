@@ -40,12 +40,17 @@ const projectSummaries: Record<string, ProjectSummary> = {
     approach: "検索・翻訳・読解/編集をエージェント分離し、Tavily・DeepL・MiniMaxを役割配分。Supabase保存とVercel Cron（JST 07:00 / 13:00 / 19:00）で定期実行を自動化した。",
     outcome: "最新AIニュースの収集から日本語要約確認までを自動化し、手作業を減らしながらトレンド監視の再現性とコスト効率を高めた。",
   },
+  "cafe-sample": {
+    problem: "フリーランス案件獲得に向けたWebサイト制作の実績づくり。",
+    approach: "AIツール（バイブコーディング）を活用し、HTML・CSS・JavaScriptのみでカフェサイトを制作。",
+    outcome: "GitHub Pagesで公開し、初のWebサイト制作を完了。",
+  },
 };
 
 function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString("en-US", {
+  return new Date(date).toLocaleDateString("ja-JP", {
     year: "numeric",
-    month: "short",
+    month: "long",
     day: "numeric",
   });
 }
@@ -100,22 +105,26 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             ))}
           </div>
           <div className="mt-4 flex flex-wrap gap-3">
-            <a
-              href={project.repoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-            >
-              リポジトリ
-            </a>
-            <a
-              href={project.demoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-            >
-              デモを見る
-            </a>
+            {project.repoUrl && (
+              <a
+                href={project.repoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center rounded-full border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+              >
+                リポジトリ
+              </a>
+            )}
+            {project.demoUrl && (
+              <a
+                href={project.demoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
+              >
+                デモを見る
+              </a>
+            )}
           </div>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
