@@ -3,9 +3,9 @@ import Link from "next/link";
 import { getAllProjects } from "@/lib/projects";
 
 function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString("en-US", {
+  return new Date(date).toLocaleDateString("ja-JP", {
     year: "numeric",
-    month: "short",
+    month: "long",
     day: "numeric",
   });
 }
