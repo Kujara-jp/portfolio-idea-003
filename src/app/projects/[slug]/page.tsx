@@ -143,7 +143,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
         </div>
       </header>
 
-      <div className="space-y-3 leading-7 text-slate-700">
+      <div className="prose prose-slate max-w-none">
         <MDXRemote source={project.content} />
       </div>
     </article>
