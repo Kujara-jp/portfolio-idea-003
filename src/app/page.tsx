@@ -77,7 +77,7 @@ export default async function HomePage() {
             </p>
           </Link>
           <Link
-            href="https://script.google.com/macros/s/AKfycbw4iMuLsAs7Qfzio8AMCQkP8UERdF2O95crLyvJKfnchSdH9lgBrZSv3VaFcJvG5M68pQ/exec"
+            href="https://script.google.com/macros/s/AKfycbyOG50cVNSDt9np5J7SAVfrnyS0LucL4YzmXLb_4UevDrWvfIDqHrR7ZZ_BVevEA-DT-g/exec"
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100"
