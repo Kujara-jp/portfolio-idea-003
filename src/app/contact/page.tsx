@@ -45,6 +45,16 @@ export default function ContactPage() {
             </a>
           </div>
         </div>
+
+        <div className="border-t border-slate-100 pt-6">
+          <p className="text-sm font-medium text-slate-500">こんなご相談、歓迎します</p>
+          <ul className="mt-3 space-y-2 text-base text-slate-700">
+            <li>・社内の手作業・属人化業務の改善</li>
+            <li>・Webアプリ・管理ツールの開発</li>
+            <li>・業務フロー整理・DX推進の相談</li>
+            <li>・その他、業務改善に関するご依頼</li>
+          </ul>
+        </div>
       </div>
     </div>
   );
