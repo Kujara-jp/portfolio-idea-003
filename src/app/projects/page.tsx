@@ -47,7 +47,7 @@ export default async function ProjectsPage() {
             <div className="mt-4 flex flex-wrap gap-3">
               <Link
                 href={`/projects/${project.slug}`}
-                className="inline-block text-sm font-medium text-slate-700 hover:text-slate-900"
+                className="inline-flex items-center rounded-full border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
               >
                 詳細を見る
               </Link>
@@ -56,7 +56,7 @@ export default async function ProjectsPage() {
                   href={project.demoUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block text-sm font-medium text-blue-600 hover:text-blue-800"
+                  className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
                 >
                   デモを見る →
                 </a>
