@@ -36,7 +36,7 @@ jobs:
 
       - name: Run collect script
         env:
-          NSUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
         run: |
           LIMIT=${{ github.event.inputs.limit || '10' }}
