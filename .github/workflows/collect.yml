@@ -1,0 +1,43 @@
+name: design-vault collect
+
+on:
+  # 毎日 JST 9:00 に自動実行（UTC 0:00）
+  schedule:
+    - cron: '0 0 * * *'
+
+  # 手動実行（Agent Teams からのトリガーにも使える）
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: '1回の実行で処理する最大件数'
+        required: false
+        default: '10'
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Run collect script
+        env:
+          NSUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
+        run: |
+          LIMIT=${{ github.event.inputs.limit || '10' }}
+          npx ts-node --project tsconfig.json scripts/collect.ts --limit=$LIMIT
