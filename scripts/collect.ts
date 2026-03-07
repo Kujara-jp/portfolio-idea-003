@@ -4,13 +4,11 @@
  *
  * 実行方法:
  *   npx ts-node scripts/collect.ts
- *   npx ts-node scripts/collect.ts --limit 5
+ *   npx ts-node scripts/collect.ts --limit=5
  */
 
-import { chromium } from "playwright";
+import { chromium, type Browser } from "playwright";
 import { createClient } from "@supabase/supabase-js";
-import * as fs from "fs";
-import * as path from "path";
 
 // ============================================================
 // 設定
@@ -22,7 +20,6 @@ const STORAGE_BUCKET = "screenshots";
 const VIEWPORT_PC = { width: 1280, height: 800 };
 const VIEWPORT_SP = { width: 375, height: 812 };
 
-// 1回の実行で処理する最大件数（GitHub Actions の分数節約のため）
 const args = process.argv.slice(2);
 const limitArg = args.find((a) => a.startsWith("--limit="));
 const BATCH_LIMIT = limitArg ? parseInt(limitArg.split("=")[1]) : 10;
@@ -38,7 +35,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 async function main() {
   console.log(`[collect] 開始 (最大${BATCH_LIMIT}件)`);
 
-  // pending のキューを取得
   const { data: queue, error: queueError } = await supabase
     .from("collect_queue")
     .select("*")
@@ -64,20 +60,17 @@ async function main() {
   for (const item of queue) {
     console.log(`\n[collect] 処理中: ${item.url}`);
 
-    // ステータスを processing に更新
     await supabase
       .from("collect_queue")
       .update({ status: "processing", started_at: new Date().toISOString() })
       .eq("queue_id", item.queue_id);
 
     try {
-      // スクリーンショット撮影
       const { screenshotPc, screenshotSp } = await takeScreenshots(
         browser,
         item.url,
       );
 
-      // Supabase Storage にアップロード
       const siteKey = urlToKey(item.url);
       const pcPath = `${siteKey}/pc.png`;
       const spPath = `${siteKey}/sp.png`;
@@ -85,7 +78,6 @@ async function main() {
       const pcUrl = await uploadScreenshot(screenshotPc, pcPath);
       const spUrl = await uploadScreenshot(screenshotSp, spPath);
 
-      // sites テーブルに upsert
       const { data: site, error: siteError } = await supabase
         .from("sites")
         .upsert(
@@ -103,7 +95,6 @@ async function main() {
         throw new Error(`sites upsert エラー: ${siteError?.message}`);
       }
 
-      // pages テーブルに insert（コーポレートサイトとして仮登録・後でタグ付け）
       const { error: pageError } = await supabase.from("pages").upsert(
         {
           site_id: site.site_id,
@@ -112,14 +103,13 @@ async function main() {
           screenshot_sp: spUrl,
           needs_review: true,
         },
-        { onConflict: "site_id, page_type" },
-      ); // 同一サイトの同一ページ種別は上書き
+        { onConflict: "site_id,page_type" },
+      );
 
       if (pageError) {
         throw new Error(`pages upsert エラー: ${pageError.message}`);
       }
 
-      // キューを done に更新
       await supabase
         .from("collect_queue")
         .update({
@@ -133,7 +123,6 @@ async function main() {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[collect] ❌ エラー: ${item.url} - ${message}`);
 
-      // キューを error に更新
       await supabase
         .from("collect_queue")
         .update({
@@ -152,16 +141,14 @@ async function main() {
 // ============================================================
 // スクリーンショット撮影
 // ============================================================
-async function takeScreenshots(browser: any, url: string) {
-  // PC
+async function takeScreenshots(browser: Browser, url: string) {
   const pcContext = await browser.newContext({ viewport: VIEWPORT_PC });
   const pcPage = await pcContext.newPage();
   await pcPage.goto(url, { waitUntil: "networkidle", timeout: 30000 });
-  await pcPage.waitForTimeout(1500); // アニメーション待ち
+  await pcPage.waitForTimeout(1500);
   const screenshotPc = await pcPage.screenshot({ fullPage: false });
   await pcContext.close();
 
-  // SP
   const spContext = await browser.newContext({ viewport: VIEWPORT_SP });
   const spPage = await spContext.newPage();
   await spPage.goto(url, { waitUntil: "networkidle", timeout: 30000 });
