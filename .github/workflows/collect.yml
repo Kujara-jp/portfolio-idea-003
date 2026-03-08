@@ -1,17 +1,17 @@
-name: design-vault collect
+name: design-vault collect & score
 
 on:
   # 毎日 JST 9:00 に自動実行（UTC 0:00）
   schedule:
-    - cron: "0 0 * * *"
+    - cron: '0 0 * * *'
 
-  # 手動実行（Agent Teams からのトリガーにも使える）
+  # 手動実行
   workflow_dispatch:
     inputs:
       limit:
-        description: "1回の実行で処理する最大件数"
+        description: '1回の実行で処理する最大件数'
         required: false
-        default: "10"
+        default: '10'
 
 jobs:
   collect:
@@ -25,8 +25,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -41,3 +41,11 @@ jobs:
         run: |
           LIMIT=${{ github.event.inputs.limit || '10' }}
           npx tsx scripts/collect.ts --limit=$LIMIT
+
+      - name: Run score script
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          npx tsx scripts/score.ts --limit=5
