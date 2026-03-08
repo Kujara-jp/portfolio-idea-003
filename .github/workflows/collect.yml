@@ -49,3 +49,11 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           npx tsx scripts/score.ts --limit=5
+
+      - name: Run tag script
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          npx tsx scripts/tag.ts --limit=5
