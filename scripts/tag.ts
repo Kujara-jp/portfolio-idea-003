@@ -97,11 +97,11 @@ interface TagResult {
 async function main() {
   console.log(`[tag] 開始 (最大${BATCH_LIMIT}件)`)
 
-  // 未タグ付けのページを取得
+  // 未タグ付けのページを取得（空配列 {} も未処理扱い）
   const { data: pages, error } = await supabase
     .from('pages')
     .select('page_id, screenshot_pc, page_type')
-    .is('design_tone', null)
+    .or('design_tone.is.null,design_tone.eq.{}')
     .not('screenshot_pc', 'is', null)
     .limit(BATCH_LIMIT)
 
