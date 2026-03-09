@@ -33,6 +33,7 @@ const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 // 型定義
 // ============================================================
 interface ScoreResult {
+  is_blocked: boolean;
   quality_score: number;
   quality_reasons: string[];
   responsive_score: number | null;
@@ -45,11 +46,12 @@ interface ScoreResult {
 async function main() {
   console.log(`[score] 開始（最大${BATCH_LIMIT}件）`);
 
-  // 未採点のページを取得
+  // 未採点のページを取得（ブロック済みは除外）
   const { data: pages, error } = await supabase
     .from("pages")
     .select("page_id, site_id, screenshot_pc, screenshot_sp, page_type")
     .is("responsive_score", null)
+    .eq("is_blocked", false)
     .not("screenshot_pc", "is", null)
     .limit(BATCH_LIMIT);
 
@@ -77,7 +79,8 @@ async function main() {
         ? await fetchImageAsBase64(page.screenshot_sp!)
         : null;
 
-      const prompt = buildScoringPrompt(page.page_type, hasSpScreenshot);
+      // page_type は将来の採点基準拡張のために保持（現在は未使用）
+      const prompt = buildScoringPrompt(hasSpScreenshot);
       const content: Anthropic.MessageParam["content"] = [
         {
           type: "image",
@@ -158,6 +161,30 @@ async function main() {
       const page = pages.find((p) => p.page_id === pageId)!;
       const scored = parseScoreResponse(text, !!page.screenshot_sp);
 
+      // ブロック検出: sites・pages 両方にフラグを立てて終了
+      if (scored.is_blocked) {
+        const { error: siteBlockError } = await supabase
+          .from("sites")
+          .update({ is_blocked: true, quality_score: null })
+          .eq("site_id", page.site_id);
+        if (siteBlockError)
+          throw new Error(`sites ブロック更新エラー: ${siteBlockError.message}`);
+
+        const { error: pageBlockError } = await supabase
+          .from("pages")
+          .update({
+            is_blocked: true,
+            responsive_score: null,
+            needs_review: false,
+          })
+          .eq("page_id", pageId);
+        if (pageBlockError)
+          throw new Error(`pages ブロック更新エラー: ${pageBlockError.message}`);
+
+        console.log(`[score] 🚫 ブロック検出 page_id=${pageId} → スキップ`);
+        continue;
+      }
+
       // sites テーブルのクオリティスコアを更新
       const { error: siteError } = await supabase
         .from("sites")
@@ -192,11 +219,29 @@ async function main() {
 // ============================================================
 // Claude Vision API 採点プロンプト
 // ============================================================
-function buildScoringPrompt(
-  pageType: string,
-  hasSpScreenshot: boolean,
-): string {
+function buildScoringPrompt(hasSpScreenshot: boolean): string {
   return `
+## 【最初に確認】ブロック・エラー判定
+このスクリーンショットが以下のいずれかに該当する場合、is_blocked: true を返し、採点は行わないでください：
+- アクセス拒否画面（403 Forbidden、Access Denied、Cloudflare Bot Check など）
+- Captcha・人間確認画面
+- 「このサイトにアクセスできません」などのブラウザエラー画面
+- ページが空白・真っ白・ローディング中のまま
+- サーバーエラー画面（500系エラー）
+
+該当する場合の出力：
+{
+  "is_blocked": true,
+  "quality_score": 1,
+  "quality_reasons": ["ブロック・エラー画面のため採点不可"],
+  "responsive_score": null,
+  "responsive_reasons": []
+}
+
+上記に該当しない場合のみ、以下の採点を行ってください。
+
+---
+
 ## ⑦ クオリティスコア
 以下の基準で1〜5点で採点してください：
 1 - 著しく品質が低い
@@ -219,6 +264,7 @@ ${
 
 ## 出力形式（必ずこのJSON形式のみで回答してください）
 {
+  "is_blocked": false,
   "quality_score": 数値(1-5),
   "quality_reasons": ["理由1", "理由2", "理由3"],
   ${
@@ -241,6 +287,8 @@ function parseScoreResponse(text: string, hasSpscreen: boolean): ScoreResult {
 
   const parsed = JSON.parse(match[0]);
 
+  const is_blocked = parsed.is_blocked === true;
+
   const quality_score = Math.min(
     5,
     Math.max(1, Math.round(Number(parsed.quality_score))),
@@ -251,6 +299,7 @@ function parseScoreResponse(text: string, hasSpscreen: boolean): ScoreResult {
       : null;
 
   return {
+    is_blocked,
     quality_score,
     quality_reasons: Array.isArray(parsed.quality_reasons)
       ? parsed.quality_reasons
