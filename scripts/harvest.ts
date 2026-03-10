@@ -86,7 +86,14 @@ async function main() {
     console.log(`[harvest] Awwwards: ${awwwardsUrls.length}件取得`);
   }
 
-  // B. Tavily 検索（日本サイト）
+  // B. CSS Design Awards スクレイピング（Playwright）
+  if (SOURCE === "all" || SOURCE === "cssda") {
+    const cssdaUrls = await harvestCSSDA(existingUrls);
+    collectedUrls.push(...cssdaUrls);
+    console.log(`[harvest] CSSDA: ${cssdaUrls.length}件取得`);
+  }
+
+  // C. Tavily 検索（日本サイト）
   if (SOURCE === "all" || SOURCE === "tavily") {
     const tavilyUrls = await harvestTavily(existingUrls);
     collectedUrls.push(...tavilyUrls);
@@ -119,6 +126,9 @@ async function main() {
   console.log(`\n[harvest] ✅ ${toInsert.length}件投入完了`);
   console.log(
     `[harvest]   Awwwards: ${toInsert.filter((u) => u.source === "awwwards").length}件`,
+  );
+  console.log(
+    `[harvest]   CSSDA:    ${toInsert.filter((u) => u.source === "cssda").length}件`,
   );
   console.log(
     `[harvest]   Tavily:   ${toInsert.filter((u) => u.source === "tavily").length}件`,
@@ -229,7 +239,82 @@ async function harvestAwwwards(
 }
 
 // ============================================================
-// B. Tavily 検索（日本サイト）
+// B. CSS Design Awards スクレイピング（Playwright版）
+//    /website-gallery から外部URLを収集
+// ============================================================
+async function harvestCSSDA(
+  existingUrls: Set<string>,
+): Promise<{ url: string; source: string; priority: number }[]> {
+  const results: { url: string; source: string; priority: number }[] = [];
+
+  const browser = await chromium.launch({ args: ["--no-sandbox"] });
+  try {
+    const context = await browser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    });
+    const page = await context.newPage();
+
+    console.log("[harvest] CSSDA: ギャラリーページからURL収集中...");
+    await page.goto("https://www.cssdesignawards.com/website-gallery", {
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
+    });
+
+    // スクロールしてlazy load分を読み込む
+    for (let i = 0; i < 5; i++) {
+      await page.evaluate(() => window.scrollBy(0, 1500));
+      await sleep(1500);
+    }
+
+    // 各サイトカードからURLを収集
+    const siteUrls = await page.evaluate((snsDomains: string[]) => {
+      const links = Array.from(document.querySelectorAll("a"))
+        .map((a) => a.href)
+        .filter(
+          (h) =>
+            h.startsWith("http") &&
+            !h.includes("cssdesignawards.com") &&
+            !snsDomains.some((sns) => h.includes(sns)),
+        );
+
+      // ホスト名で重複排除
+      const seen = new Set<string>();
+      const unique: string[] = [];
+      for (const link of links) {
+        try {
+          const parsed = new URL(link);
+          const host = parsed.hostname.toLowerCase();
+          if (!seen.has(host)) {
+            seen.add(host);
+            unique.push(`${parsed.protocol}//${parsed.hostname}`);
+          }
+        } catch {
+          // skip
+        }
+      }
+      return unique;
+    }, SNS_DOMAINS);
+
+    console.log(`[harvest] CSSDA: ${siteUrls.length}件のURL取得`);
+
+    for (const url of siteUrls.slice(0, 30)) {
+      if (!existingUrls.has(normalizeUrl(url))) {
+        existingUrls.add(normalizeUrl(url));
+        results.push({ url, source: "cssda", priority: 1 });
+      }
+    }
+  } catch (err) {
+    console.warn("[harvest] CSSDA エラー:", err);
+  } finally {
+    await browser.close();
+  }
+
+  return results;
+}
+
+// ============================================================
+// C. Tavily 検索（日本サイト）
 // ============================================================
 async function harvestTavily(
   existingUrls: Set<string>,
