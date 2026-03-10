@@ -28,6 +28,8 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY!;
 
 const MAX_SUBPAGES = 9;
 const SITEMAP_MIN_THRESHOLD = 3;
+const MAX_SITEMAP_URLS = 500;
+const SITE_TIMEOUT_MS = 60_000;
 
 const args = process.argv.slice(2);
 const limitArg = args.find((a) => a.startsWith("--limit="));
@@ -98,7 +100,12 @@ async function main() {
     console.log(`\n[discover] 処理中: ${site.url}`);
 
     try {
-      await discoverSubpages(browser, site.site_id, site.url);
+      await Promise.race([
+        discoverSubpages(browser, site.site_id, site.url),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("タイムアウト (60s)")), SITE_TIMEOUT_MS),
+        ),
+      ]);
       // 成功時のみ処理済みに更新（エラー時は次回再試行）
       const { error: updateError } = await supabase
         .from("sites")
@@ -110,6 +117,11 @@ async function main() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[discover] ❌ エラー: ${site.url} - ${message}`);
+      // エラーでもスキップして次のサイトへ進むため処理済みにする
+      await supabase
+        .from("sites")
+        .update({ subpages_discovered: true })
+        .eq("site_id", site.site_id);
     }
   }
 
@@ -259,6 +271,7 @@ async function parseSitemap(
   depth: number,
 ): Promise<void> {
   if (depth > SITEMAP_MAX_DEPTH) return;
+  if (urls.length >= MAX_SITEMAP_URLS) return;
 
   try {
     const res = await fetch(sitemapUrl, {
@@ -273,6 +286,7 @@ async function parseSitemap(
     const locRegex = /<loc>\s*(.*?)\s*<\/loc>/gi;
     let match: RegExpExecArray | null;
     while ((match = locRegex.exec(text)) !== null) {
+      if (urls.length >= MAX_SITEMAP_URLS) break;
       const url = match[1].trim();
       if (!url.startsWith("http")) continue;
 
