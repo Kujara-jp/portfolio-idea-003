@@ -11,7 +11,7 @@ on:
       limit:
         description: "1回の実行で処理する最大件数"
         required: false
-        default: "50"
+        default: "150"
 
 jobs:
   collect:
