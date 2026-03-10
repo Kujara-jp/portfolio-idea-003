@@ -41,6 +41,7 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: |
           npx tsx scripts/harvest.ts --limit=100
+        continue-on-error: true
 
       - name: Run collect script
         env:
@@ -54,5 +55,6 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
+          NODE_OPTIONS: "--max-old-space-size=2048"
         run: |
           npx tsx scripts/discover.ts --limit=20

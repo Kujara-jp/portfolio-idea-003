@@ -302,8 +302,8 @@ async function crawlHomepageLinks(
 
   try {
     const page = await context.newPage();
-    await page.goto(siteUrl, { waitUntil: "networkidle", timeout: 30000 });
-    await page.waitForTimeout(2000);
+    await page.goto(siteUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.waitForTimeout(3000);
 
     const hrefs = await page.evaluate(() => {
       const anchors = document.querySelectorAll("a[href]");
