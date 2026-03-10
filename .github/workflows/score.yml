@@ -1,9 +1,10 @@
 name: design-vault score & tag
 
 on:
-  # 毎晩 JST 22:00
-  schedule:
-    - cron: "0 13 * * *" # UTC 13:00 = JST 22:00
+  # collect 完了後に自動トリガー
+  workflow_run:
+    workflows: ["design-vault collect"]
+    types: [completed]
 
   # 手動実行
   workflow_dispatch:
