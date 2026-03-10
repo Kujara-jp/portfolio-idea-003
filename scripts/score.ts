@@ -318,58 +318,51 @@ If NOT blocked, proceed to scoring below.
 
 ## Step 2: Quality Score (1-5)
 
-Rate the overall visual design quality of the PC screenshot using the following scale:
+Rate the overall visual design quality of the PC screenshot.
 
-| Score | 評価 | 基準 |
-|-------|------|------|
-| 1 | 低品質 | 問題が複数あり参考にならない |
-| 2 | 平均以下 | 業界水準を下回る。改善余地が多い |
-| 3 | 標準 | 業界水準を満たすが際立った要素はない |
-| 4 | 高品質 | 細部まで作り込まれ洗練されている |
-| 5 | 傑出 | 業界をリードするレベル |
+IMPORTANT: Be strict. Apply the following distribution as a guideline:
+- Score 1 (~5%): Clearly broken, outdated, or unusable design
+- Score 2 (~20%): Below average. Generic templates, poor spacing, weak typography
+- Score 3 (~45%): Industry standard. Competent but unremarkable. Most professional sites belong here
+- Score 4 (~25%): High quality. Polished details, strong visual hierarchy, memorable
+- Score 5 (~5%): Exceptional. Award-winning level. Innovative, flawless execution
 
-Evaluate based on the following 10 criteria:
-1. ビジュアル完成度（配色・装飾要素の完成度）
-2. タイポグラフィ品質（フォント選定・サイズ比・行間・字間）
-3. ファーストビューの訴求力（3秒以内に何のサイトか・誰向けかが伝わるか）
-4. 情報設計の明快さ（ページ全体で何をすべきかが一目で分かるか）
-5. ブランド一貫性（色・形・トーンが全体を通して統一されているか）
-6. 余白・スペーシングの設計品質（余白が意図的に設計されているか）
-7. 独自性・差別化度（記憶に残るか。「どこかで見た」感がないか）
-8. 細部の作り込み（アイコン・シャドウ・境界線等の微細な品質）
-9. 視覚的ヒエラルキーの明確さ（要素の重要度が大きさ・色・位置で明確に表現されているか）
-10. ターゲット適合度（デザインのトーン・内容がターゲットユーザーに適合しているか）
+Do NOT default to 4. A "clean, professional site" is typically a 3. Score 4 requires something that stands out. Score 5 is reserved for sites you would submit to a design award.
+
+Evaluate based on these 5 key criteria:
+1. ビジュアル完成度と独自性（配色・装飾が洗練されているか、記憶に残るか）
+2. タイポグラフィと余白設計（フォント選定・サイズ比・余白が意図的に設計されているか）
+3. 情報設計とヒエラルキー（要素の優先度が明確で、3秒以内に目的が伝わるか）
+4. ブランド一貫性と細部の作り込み（色・トーン統一、アイコン・シャドウ等の微細品質）
+5. ターゲット適合度（デザインが想定ユーザーに適切か）
 ${
   targetUser && targetUser.length > 0
-    ? `\nTarget user for criterion 10: ${targetUser.join(", ")}. Evaluate whether the design is appropriate for this audience.`
-    : `\nNo target user information available for criterion 10. Evaluate based on what the design itself implies about its intended audience.`
+    ? `\nTarget user for criterion 5: ${targetUser.join(", ")}.`
+    : ``
 }
 
-Provide exactly 3 reasons in Japanese citing specific visual evidence from the above criteria.
+Provide exactly 3 reasons in Japanese citing specific visual evidence.
 
 ## Step 3: Responsive Score (1-5)
 ${
   hasSpScreenshot
-    ? `Compare the PC screenshot (1st image) and SP screenshot (2nd image) side by side to evaluate responsive design quality.
+    ? `Compare the PC screenshot (1st image) and SP screenshot (2nd image).
 
-| Score | 評価 | 基準 |
-|-------|------|------|
-| 1 | 未対応 | SP表示で崩れ・横スクロール発生・実用不可 |
-| 2 | 最低限対応 | 横幅縮小のみ。テキスト・画像が小さくなるだけ |
-| 3 | 標準対応 | 主要ブレークポイントでレイアウト変更あり |
-| 4 | 高品質対応 | PC・SP双方で最適化された別レイアウト。余白・フォントも最適化 |
-| 5 | モバイルファースト設計 | SPを主軸に設計。タップターゲット・スワイプUI等まで最適化 |
+Apply the same strict distribution as quality score:
+- Score 1 (~5%): Not responsive at all. Broken on mobile
+- Score 2 (~20%): Minimal effort. Just shrunk, no real optimization
+- Score 3 (~45%): Standard responsive. Layout changes at breakpoints but nothing special
+- Score 4 (~25%): Well optimized. Separate layouts, adjusted typography and spacing
+- Score 5 (~5%): Mobile-first excellence. Touch-optimized, swipe UI, perfect adaptation
 
-Evaluate based on the following 7 criteria:
-1. レイアウト変化の適切さ（PCとSPで別レイアウトに最適化されているか）
-2. フォント・余白の最適化（SP時にフォントサイズ・余白が調整されているか）
-3. タップターゲットの適切さ（ボタン・リンクがSPで押しやすいサイズか）
-4. 画像・メディアの最適化（SP時に画像サイズ・アスペクト比が適切か）
-5. ナビゲーションの変化（PCナビがSP用に適切に変化しているか）
-6. フォーム・入力UIのSP最適化（テキスト入力・セレクトボックス等のSP操作性）
-7. SP時のコンテンツ取捨選択（情報の優先順位づけが適切に行われているか）
+A site that "works on mobile" is a 3, not a 4.
 
-Provide exactly 2 reasons in Japanese citing specific visual differences between PC and SP.`
+Evaluate based on:
+1. レイアウト変化の適切さ（PCとSPで適切に最適化されているか）
+2. タイポグラフィ・余白・タップターゲットの最適化
+3. ナビゲーションとコンテンツの取捨選択
+
+Provide exactly 2 reasons in Japanese citing specific visual differences.`
     : `No SP screenshot available. Cannot evaluate responsive design.`
 }
 

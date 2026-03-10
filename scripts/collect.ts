@@ -89,6 +89,7 @@ async function main() {
             {
               url: item.url,
               name: item.site_name ?? extractDomain(item.url),
+              region: detectRegion(item.url),
               collected_at: new Date().toISOString(),
             },
             { onConflict: "url" },
@@ -208,6 +209,19 @@ function extractDomain(url: string): string {
   } catch {
     return url;
   }
+}
+
+// 日本TLD一覧
+const JP_TLDS = [".jp", ".co.jp", ".or.jp", ".ne.jp", ".ac.jp", ".go.jp"];
+
+function detectRegion(url: string): "jp" | "global" {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    if (JP_TLDS.some((tld) => hostname.endsWith(tld))) return "jp";
+  } catch {
+    // パース失敗
+  }
+  return "global";
 }
 
 // ============================================================
