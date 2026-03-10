@@ -34,6 +34,13 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
 
+      - name: Retry blocked sites
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
+        run: npx tsx scripts/retry.ts --limit=20
+        continue-on-error: true
+
       - name: Run harvest script
         env:
           SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
