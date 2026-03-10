@@ -302,6 +302,14 @@ async function crawlHomepageLinks(
 
   try {
     const page = await context.newPage();
+    // 画像・フォント・メディア・CSSをブロックしてメモリ節約
+    await page.route("**/*", (route) => {
+      const type = route.request().resourceType();
+      if (["image", "media", "font", "stylesheet"].includes(type)) {
+        return route.abort();
+      }
+      return route.continue();
+    });
     await page.goto(siteUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
     await page.waitForTimeout(3000);
 
