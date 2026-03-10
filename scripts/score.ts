@@ -32,12 +32,16 @@ const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 // ============================================================
 // 型定義
 // ============================================================
+type Confidence = "high" | "medium" | "low";
+
 interface ScoreResult {
   is_blocked: boolean;
-  quality_score: number;
+  quality_score: number | null;
   quality_reasons: string[];
   responsive_score: number | null;
   responsive_reasons: string[];
+  confidence: Confidence;
+  needs_review: boolean;
 }
 
 // ============================================================
@@ -47,11 +51,12 @@ async function main() {
   console.log(`[score] 開始（最大${BATCH_LIMIT}件）`);
 
   // 未採点のページを取得（ブロック済みは除外）
+  // sites.target_user をJOINで取得（⑦クオリティスコアのターゲット適合度評価に必要）
   const { data: pages, error } = await supabase
     .from("pages")
-    .select("page_id, site_id, screenshot_pc, screenshot_sp, page_type")
+    .select("page_id, site_id, screenshot_pc, screenshot_sp, page_type, page_url, sites(url, target_user)")
     .is("responsive_score", null)
-    .eq("is_blocked", false)
+    .or("is_blocked.eq.false,is_blocked.is.null")
     .not("screenshot_pc", "is", null)
     .limit(BATCH_LIMIT);
 
@@ -80,11 +85,23 @@ async function main() {
         : null;
 
       // page_type は将来の採点基準拡張のために保持（現在は未使用）
-      const prompt = buildScoringPrompt(hasSpScreenshot);
+      // sites.target_user: ターゲット適合度評価のためプロンプトに渡す（AGENT.md準拠）
+      // Supabase PostgREST: many-to-one JOINは単一オブジェクトで返る
+      const siteRelation = page.sites;
+      const siteData = (Array.isArray(siteRelation) ? siteRelation[0] : siteRelation) as
+        | { url: string; target_user: string[] | null }
+        | null
+        | undefined;
+      const targetUser = siteData?.target_user ?? undefined;
+      const prompt = buildScoringPrompt(hasSpScreenshot, targetUser);
+      const pcMediaType = detectMediaType(page.screenshot_pc);
+      const spMediaType = page.screenshot_sp
+        ? detectMediaType(page.screenshot_sp)
+        : pcMediaType;
       const content: Anthropic.MessageParam["content"] = [
         {
           type: "image",
-          source: { type: "base64", media_type: "image/png", data: pcBase64 },
+          source: { type: "base64", media_type: pcMediaType, data: pcBase64 },
         },
         ...(spBase64
           ? [
@@ -92,7 +109,7 @@ async function main() {
                 type: "image" as const,
                 source: {
                   type: "base64" as const,
-                  media_type: "image/png" as const,
+                  media_type: spMediaType as "image/webp",
                   data: spBase64,
                 },
               },
@@ -161,14 +178,34 @@ async function main() {
       const page = pages.find((p) => p.page_id === pageId)!;
       const scored = parseScoreResponse(text, !!page.screenshot_sp);
 
-      // ブロック検出: sites・pages 両方にフラグを立てて終了
+      // ホームページ判定: page_url と sites.url を比較
+      // page_type ではなく URL で判定（その他・未分類はサブページにも使われるため）
+      const pageSite = (Array.isArray(page.sites) ? page.sites[0] : page.sites) as
+        | { url: string; target_user: string[] | null }
+        | null
+        | undefined;
+      const isHomepage = !!(
+        pageSite?.url &&
+        page.page_url &&
+        normalizeUrl(page.page_url) === normalizeUrl(pageSite.url)
+      );
+
+      // ブロック検出: pages にフラグを立てて終了
+      // AGENT.md準拠: ブロック時は pages.needs_review=false
+      // サイトレベルのブロックはホームページの場合のみ
       if (scored.is_blocked) {
-        const { error: siteBlockError } = await supabase
-          .from("sites")
-          .update({ is_blocked: true, quality_score: null })
-          .eq("site_id", page.site_id);
-        if (siteBlockError)
-          throw new Error(`sites ブロック更新エラー: ${siteBlockError.message}`);
+
+        if (isHomepage) {
+          const { error: siteBlockError } = await supabase
+            .from("sites")
+            .update({
+              is_blocked: true,
+              quality_score: null,
+            })
+            .eq("site_id", page.site_id);
+          if (siteBlockError)
+            throw new Error(`sites ブロック更新エラー: ${siteBlockError.message}`);
+        }
 
         const { error: pageBlockError } = await supabase
           .from("pages")
@@ -181,29 +218,57 @@ async function main() {
         if (pageBlockError)
           throw new Error(`pages ブロック更新エラー: ${pageBlockError.message}`);
 
-        console.log(`[score] 🚫 ブロック検出 page_id=${pageId} → スキップ`);
+        console.log(`[score] 🚫 ブロック検出 page_id=${pageId} (${page.page_type}) → スキップ`);
         continue;
       }
 
-      // sites テーブルのクオリティスコアを更新
-      const { error: siteError } = await supabase
-        .from("sites")
-        .update({ quality_score: scored.quality_score })
-        .eq("site_id", page.site_id);
-      if (siteError) throw new Error(`sites 更新エラー: ${siteError.message}`);
+      // sites テーブルのクオリティスコアを更新（ホームページの場合のみ）
+      // サブページのスコアでサイト代表値を上書きしない
+      // needs_reviewはtrueの場合のみ設定（他スクリプトがsite-levelで立てたフラグを消さないため）
+      if (isHomepage) {
+        const siteUpdate: Record<string, unknown> = {
+          quality_score: scored.quality_score,
+        };
+        if (scored.needs_review) {
+          siteUpdate.needs_review = true;
+        }
+        const { error: siteError } = await supabase
+          .from("sites")
+          .update(siteUpdate)
+          .eq("site_id", page.site_id);
+        if (siteError) throw new Error(`sites 更新エラー: ${siteError.message}`);
+      } else if (scored.needs_review) {
+        // サブページでも needs_review は反映（one-way true）
+        const { error: siteError } = await supabase
+          .from("sites")
+          .update({ needs_review: true })
+          .eq("site_id", page.site_id);
+        if (siteError) throw new Error(`sites 更新エラー: ${siteError.message}`);
+      }
 
       // pages テーブルのレスポンシブスコアを更新
       const { error: pageError } = await supabase
         .from("pages")
         .update({
           responsive_score: scored.responsive_score,
-          needs_review: false,
+          needs_review: scored.needs_review,
         })
         .eq("page_id", pageId);
       if (pageError) throw new Error(`pages 更新エラー: ${pageError.message}`);
 
+      if (scored.quality_score == null) {
+        console.warn(
+          `[score] ⚠️ quality_score欠落 page_id=${pageId} → needs_review=true`,
+        );
+      }
+      if (page.screenshot_sp && scored.responsive_score == null) {
+        console.warn(
+          `[score] ⚠️ responsive_score欠落（SP有り） page_id=${pageId} → needs_review=true`,
+        );
+      }
+
       console.log(
-        `[score] ✅ 完了 quality=${scored.quality_score} responsive=${
+        `[score] ✅ 完了 quality=${scored.quality_score ?? "null"} responsive=${
           scored.responsive_score ?? "n/a"
         }`,
       );
@@ -219,62 +284,112 @@ async function main() {
 // ============================================================
 // Claude Vision API 採点プロンプト
 // ============================================================
-function buildScoringPrompt(hasSpScreenshot: boolean): string {
+function buildScoringPrompt(hasSpScreenshot: boolean, targetUser?: string[]): string {
   return `
-## 【最初に確認】ブロック・エラー判定
-このスクリーンショットが以下のいずれかに該当する場合、is_blocked: true を返し、採点は行わないでください：
-- アクセス拒否画面（403 Forbidden、Access Denied、Cloudflare Bot Check など）
-- Captcha・人間確認画面
-- 「このサイトにアクセスできません」などのブラウザエラー画面
-- ページが空白・真っ白・ローディング中のまま
-- サーバーエラー画面（500系エラー）
+You are a web design evaluator. Score based primarily on what is visually observable in the screenshot(s). Do not guess or assume anything not visible, except when target user information is provided below for evaluating target fit.
 
-該当する場合の出力：
+## Step 1: Block / Error Detection
+
+If the screenshot clearly shows one of these PERMANENT error states, return is_blocked: true and skip scoring:
+- HTTP error page (403 Forbidden, 500 Internal Server Error, 502, 503, etc.)
+- NOTE: Do NOT block 404 pages. Custom 404 pages are valid design samples and should be scored normally.
+- Access denied / Cloudflare bot-check / WAF block page
+- CAPTCHA or human-verification interstitial
+- Browser-level error ("This site can't be reached", DNS failure, connection refused, etc.)
+
+Also block if the page is completely blank/white with no content rendered at all, or shows only a loading spinner or skeleton placeholders with no actual content.
+
+IMPORTANT: Do NOT mark as blocked if the page has a minimalist design or intentional whitespace. These are valid design choices, not errors. A page with any intentional content (logo, text, navigation) is NOT blank even if the layout is very sparse.
+
+If blocked:
 {
   "is_blocked": true,
-  "quality_score": 1,
-  "quality_reasons": ["ブロック・エラー画面のため採点不可"],
+  "quality_score": null,
+  "quality_reasons": ["ブロック・エラーページのため採点不可"],
   "responsive_score": null,
-  "responsive_reasons": []
+  "responsive_reasons": [],
+  "confidence": "high",
+  "needs_review": false
 }
 
-上記に該当しない場合のみ、以下の採点を行ってください。
+If NOT blocked, proceed to scoring below.
 
 ---
 
-## ⑦ クオリティスコア
-以下の基準で1〜5点で採点してください：
-1 - 著しく品質が低い
-2 - 品質に問題あり
-3 - 標準的な品質
-4 - 高品質
-5 - 非常に高品質・洗練されている
+## Step 2: Quality Score (1-5)
 
-## ⑬ レスポンシブ対応品質スコア
+Rate the overall visual design quality of the PC screenshot using the following scale:
+
+| Score | 評価 | 基準 |
+|-------|------|------|
+| 1 | 低品質 | 問題が複数あり参考にならない |
+| 2 | 平均以下 | 業界水準を下回る。改善余地が多い |
+| 3 | 標準 | 業界水準を満たすが際立った要素はない |
+| 4 | 高品質 | 細部まで作り込まれ洗練されている |
+| 5 | 傑出 | 業界をリードするレベル |
+
+Evaluate based on the following 10 criteria:
+1. ビジュアル完成度（配色・装飾要素の完成度）
+2. タイポグラフィ品質（フォント選定・サイズ比・行間・字間）
+3. ファーストビューの訴求力（3秒以内に何のサイトか・誰向けかが伝わるか）
+4. 情報設計の明快さ（ページ全体で何をすべきかが一目で分かるか）
+5. ブランド一貫性（色・形・トーンが全体を通して統一されているか）
+6. 余白・スペーシングの設計品質（余白が意図的に設計されているか）
+7. 独自性・差別化度（記憶に残るか。「どこかで見た」感がないか）
+8. 細部の作り込み（アイコン・シャドウ・境界線等の微細な品質）
+9. 視覚的ヒエラルキーの明確さ（要素の重要度が大きさ・色・位置で明確に表現されているか）
+10. ターゲット適合度（デザインのトーン・内容がターゲットユーザーに適合しているか）
+${
+  targetUser && targetUser.length > 0
+    ? `\nTarget user for criterion 10: ${targetUser.join(", ")}. Evaluate whether the design is appropriate for this audience.`
+    : `\nNo target user information available for criterion 10. Evaluate based on what the design itself implies about its intended audience.`
+}
+
+Provide exactly 3 reasons in Japanese citing specific visual evidence from the above criteria.
+
+## Step 3: Responsive Score (1-5)
 ${
   hasSpScreenshot
-    ? `SPスクリーンショットを参照して以下の基準で1〜5点で採点してください：
-1 - レスポンシブ対応なし・崩れている
-2 - 部分的に対応・問題あり
-3 - 標準的な対応
-4 - よく対応している
-5 - 完全に最適化されたレスポンシブデザイン`
-    : `SPスクリーンショットがないため採点不可。`
+    ? `Compare the PC screenshot (1st image) and SP screenshot (2nd image) side by side to evaluate responsive design quality.
+
+| Score | 評価 | 基準 |
+|-------|------|------|
+| 1 | 未対応 | SP表示で崩れ・横スクロール発生・実用不可 |
+| 2 | 最低限対応 | 横幅縮小のみ。テキスト・画像が小さくなるだけ |
+| 3 | 標準対応 | 主要ブレークポイントでレイアウト変更あり |
+| 4 | 高品質対応 | PC・SP双方で最適化された別レイアウト。余白・フォントも最適化 |
+| 5 | モバイルファースト設計 | SPを主軸に設計。タップターゲット・スワイプUI等まで最適化 |
+
+Evaluate based on the following 7 criteria:
+1. レイアウト変化の適切さ（PCとSPで別レイアウトに最適化されているか）
+2. フォント・余白の最適化（SP時にフォントサイズ・余白が調整されているか）
+3. タップターゲットの適切さ（ボタン・リンクがSPで押しやすいサイズか）
+4. 画像・メディアの最適化（SP時に画像サイズ・アスペクト比が適切か）
+5. ナビゲーションの変化（PCナビがSP用に適切に変化しているか）
+6. フォーム・入力UIのSP最適化（テキスト入力・セレクトボックス等のSP操作性）
+7. SP時のコンテンツ取捨選択（情報の優先順位づけが適切に行われているか）
+
+Provide exactly 2 reasons in Japanese citing specific visual differences between PC and SP.`
+    : `No SP screenshot available. Cannot evaluate responsive design.`
 }
 
-## 出力形式（必ずこのJSON形式のみで回答してください）
+## Output Format (respond with ONLY this JSON, no other text)
 {
   "is_blocked": false,
-  "quality_score": 数値(1-5),
-  "quality_reasons": ["理由1", "理由2", "理由3"],
+  "quality_score": <integer 1-5>,
+  "quality_reasons": ["<根拠1>", "<根拠2>", "<根拠3>"],
   ${
     hasSpScreenshot
-      ? `"responsive_score": 数値(1-5),
-  "responsive_reasons": ["理由1", "理由2"]`
+      ? `"responsive_score": <integer 1-5>,
+  "responsive_reasons": ["<根拠1>", "<根拠2>"]`
       : `"responsive_score": null,
   "responsive_reasons": []`
-  }
+  },
+  "confidence": "<high or medium or low>",
+  "needs_review": false
 }
+
+- confidence が "low" の場合は needs_review を true にすること
 `.trim();
 }
 
@@ -289,14 +404,39 @@ function parseScoreResponse(text: string, hasSpscreen: boolean): ScoreResult {
 
   const is_blocked = parsed.is_blocked === true;
 
-  const quality_score = Math.min(
-    5,
-    Math.max(1, Math.round(Number(parsed.quality_score))),
-  );
+  // ブロック時はスコアをnullで返す（AGENT.md準拠: センチネル値禁止）
+  // NaN（非数値レスポンス "N/A" 等）もnullとして扱う
+  const rawQuality = Number(parsed.quality_score);
+  const quality_score =
+    is_blocked || parsed.quality_score == null || Number.isNaN(rawQuality)
+      ? null
+      : Math.min(5, Math.max(1, Math.round(rawQuality)));
+  const rawResponsive = Number(parsed.responsive_score);
   const responsive_score =
-    parsed.responsive_score != null
-      ? Math.min(5, Math.max(1, Math.round(Number(parsed.responsive_score))))
-      : null;
+    is_blocked || parsed.responsive_score == null || Number.isNaN(rawResponsive)
+      ? null
+      : Math.min(5, Math.max(1, Math.round(rawResponsive)));
+
+  // 非ブロックなのにスコアが欠落している場合はneeds_review強制
+  const qualityMissing = !is_blocked && quality_score == null;
+  // SP画像ありなのにresponsive_scoreが欠落している場合もneeds_review強制
+  const responsiveMissing = !is_blocked && hasSpscreen && responsive_score == null;
+
+  // confidence判定: 欠落・不正値の場合はlowとして扱い、needs_review強制（AGENT.md準拠）
+  const rawConfidence = parsed.confidence;
+  const confidence: Confidence =
+    rawConfidence === "high"
+      ? "high"
+      : rawConfidence === "medium"
+        ? "medium"
+        : "low";
+  // confidence が low、欠落/不正、またはスコア欠落の場合は needs_review を強制する
+  const needs_review =
+    confidence === "low" ||
+    !["high", "medium", "low"].includes(rawConfidence) ||
+    qualityMissing ||
+    responsiveMissing ||
+    parsed.needs_review === true;
 
   return {
     is_blocked,
@@ -308,7 +448,24 @@ function parseScoreResponse(text: string, hasSpscreen: boolean): ScoreResult {
     responsive_reasons: Array.isArray(parsed.responsive_reasons)
       ? parsed.responsive_reasons
       : [],
+    confidence,
+    needs_review,
   };
+}
+
+// ============================================================
+// 画像メディアタイプ判定
+// ============================================================
+function detectMediaType(
+  url: string,
+): "image/webp" | "image/png" | "image/jpeg" | "image/gif" {
+  const lower = url.toLowerCase();
+  if (lower.includes(".webp")) return "image/webp";
+  if (lower.includes(".png")) return "image/png";
+  if (lower.includes(".jpg") || lower.includes(".jpeg")) return "image/jpeg";
+  if (lower.includes(".gif")) return "image/gif";
+  // AGENT.md: スクリーンショットはWebP形式で保存
+  return "image/webp";
 }
 
 // ============================================================
@@ -319,6 +476,13 @@ async function fetchImageAsBase64(url: string): Promise<string> {
   if (!res.ok) throw new Error(`画像取得失敗: ${url} (${res.status})`);
   const buffer = await res.arrayBuffer();
   return Buffer.from(buffer).toString("base64");
+}
+
+// ============================================================
+// URL正規化（ホームページ判定用）
+// ============================================================
+function normalizeUrl(url: string): string {
+  return url.toLowerCase().replace(/\/$/, "").replace(/^https?:\/\//, "");
 }
 
 // ============================================================

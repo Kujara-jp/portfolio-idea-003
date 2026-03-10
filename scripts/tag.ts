@@ -168,6 +168,7 @@ async function main() {
     .from("pages")
     .select("page_id, screenshot_pc, page_type")
     .or("design_tone.is.null,design_tone.eq.{}")
+    .or("is_blocked.eq.false,is_blocked.is.null")
     .not("screenshot_pc", "is", null)
     .limit(BATCH_LIMIT);
 

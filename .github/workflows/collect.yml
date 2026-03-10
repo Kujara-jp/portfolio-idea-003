@@ -52,6 +52,13 @@ jobs:
           LIMIT=${{ github.event.inputs.limit || '50' }}
           npx tsx scripts/collect.ts --limit=$LIMIT
 
+      - name: Run discover script
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
+        run: |
+          npx tsx scripts/discover.ts --limit=20
+
       - name: Run score script
         env:
           SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}

@@ -78,32 +78,40 @@ async function main() {
       const pcUrl = await uploadScreenshot(screenshotPc, pcPath);
       const spUrl = await uploadScreenshot(screenshotSp, spPath);
 
-      const { data: site, error: siteError } = await supabase
-        .from("sites")
-        .upsert(
-          {
-            url: item.url,
-            name: item.site_name ?? extractDomain(item.url),
-            collected_at: new Date().toISOString(),
-          },
-          { onConflict: "url" },
-        )
-        .select("site_id")
-        .single();
+      // サブページ（site_id がキューにある場合）はサイト upsert をスキップ
+      let siteId: string;
+      if (item.site_id) {
+        siteId = item.site_id;
+      } else {
+        const { data: site, error: siteError } = await supabase
+          .from("sites")
+          .upsert(
+            {
+              url: item.url,
+              name: item.site_name ?? extractDomain(item.url),
+              collected_at: new Date().toISOString(),
+            },
+            { onConflict: "url" },
+          )
+          .select("site_id")
+          .single();
 
-      if (siteError || !site) {
-        throw new Error(`sites upsert エラー: ${siteError?.message}`);
+        if (siteError || !site) {
+          throw new Error(`sites upsert エラー: ${siteError?.message}`);
+        }
+        siteId = site.site_id;
       }
 
       const { error: pageError } = await supabase.from("pages").upsert(
         {
-          site_id: site.site_id,
-          page_type: "その他・未分類",
+          site_id: siteId,
+          page_type: item.page_type || "その他・未分類",
+          page_url: item.url,
           screenshot_pc: pcUrl,
           screenshot_sp: spUrl,
           needs_review: true,
         },
-        { onConflict: "site_id,page_type" },
+        { onConflict: "site_id,page_url" },
       );
 
       if (pageError) {
