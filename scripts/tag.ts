@@ -8,10 +8,12 @@
  *   ⑪ ナビゲーション構造
  *   ⑫ コンバージョン設計
  *   ⑳ ビジュアル素材
+ *   + page_type（「その他・未分類」の場合のみ AI 判定）
  *
  * 実行方法:
- *   npx tsx scripts/tag.ts
- *   npx tsx scripts/tag.ts --limit=5
+ *   npx tsx scripts/tag.ts                          # 未タグページをタグ付け
+ *   npx tsx scripts/tag.ts --limit=5                # 最大5件
+ *   npx tsx scripts/tag.ts --reclassify --limit=10  # 「その他・未分類」を再分類
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -27,12 +29,47 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY!;
 const args = process.argv.slice(2);
 const limitArg = args.find((a) => a.startsWith("--limit="));
 const BATCH_LIMIT = limitArg ? parseInt(limitArg.split("=")[1]) : 5;
+const RECLASSIFY_MODE = args.includes("--reclassify");
 
 const POLL_INTERVAL_MS = 30_000; // 30秒おきにポーリング
 const MAX_WAIT_MS = 25 * 60 * 1000; // 最大25分待機
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+
+// ============================================================
+// 有効な page_type 一覧
+// ============================================================
+const VALID_PAGE_TYPES = [
+  "コーポレートサイト",
+  "会社概要・About",
+  "サービス紹介",
+  "料金・プラン",
+  "事例・実績",
+  "ブログ・オウンドメディア",
+  "ニュース・お知らせ",
+  "採用サイト",
+  "お問い合わせ",
+  "LP（ランディングページ）",
+  "ECサイト",
+  "商品・物件・案件詳細",
+  "ログイン・会員登録",
+  "プライバシーポリシー・利用規約",
+  "スタッフ・チーム紹介",
+  "イベント・キャンペーン",
+  "資料請求・ダウンロード",
+  "予約・booking",
+  "比較・特長",
+  "検索結果・一覧",
+  "404",
+  "エラー・メンテナンス",
+  "サンクス・完了",
+  "ダッシュボード・マイページ",
+  "Onboarding・チュートリアル",
+  "ランキング・おすすめ",
+  "FAQ・よくある質問",
+  "その他・未分類",
+];
 
 // ============================================================
 // タグ定義
@@ -155,22 +192,30 @@ interface TagResult {
   navigation: string[];
   conversion: string[];
   visual_material: string[];
+  page_type: string | null;
 }
 
 // ============================================================
 // メイン処理
 // ============================================================
 async function main() {
-  console.log(`[tag] 開始（最大${BATCH_LIMIT}件）`);
+  const modeLabel = RECLASSIFY_MODE ? "reclassify" : "tag";
+  console.log(`[tag] 開始（${modeLabel}モード、最大${BATCH_LIMIT}件）`);
 
-  // 未タグ付けのページを取得
-  const { data: pages, error } = await supabase
+  // ページ取得: reclassify モードは「その他・未分類」を対象、通常は未タグページ
+  let query = supabase
     .from("pages")
-    .select("page_id, screenshot_pc, page_type")
-    .or("design_tone.is.null,design_tone.eq.{}")
+    .select("page_id, screenshot_pc, page_type, page_url")
     .or("is_blocked.eq.false,is_blocked.is.null")
-    .not("screenshot_pc", "is", null)
-    .limit(BATCH_LIMIT);
+    .not("screenshot_pc", "is", null);
+
+  if (RECLASSIFY_MODE) {
+    query = query.eq("page_type", "その他・未分類");
+  } else {
+    query = query.or("design_tone.is.null,design_tone.eq.{}");
+  }
+
+  const { data: pages, error } = await query.limit(BATCH_LIMIT);
 
   if (error) {
     console.error("[tag] ページ取得エラー:", error.message);
@@ -191,7 +236,7 @@ async function main() {
   for (const page of pages) {
     try {
       const imageBase64 = await fetchImageAsBase64(page.screenshot_pc);
-      const prompt = buildTaggingPrompt(page.page_type);
+      const prompt = buildTaggingPrompt(page.page_type, page.page_url ?? "");
 
       requests.push({
         model: "claude-haiku-4-5-20251001",
@@ -267,17 +312,27 @@ async function main() {
 
       const tagged = parseTagResponse(text);
 
+      // タグ更新データを構築
+      const updateData: Record<string, unknown> = {
+        design_tone: tagged.design_tone,
+        color_scheme: tagged.color_scheme,
+        layout_pattern: tagged.layout_pattern,
+        typography_tags: tagged.typography,
+        navigation_tags: tagged.navigation,
+        conversion_tags: tagged.conversion,
+        visual_material: tagged.visual_material,
+      };
+
+      // page_type が AI 判定で返され、現在値と異なる場合のみ更新
+      const currentPage = pages!.find((p) => p.page_id === pageId);
+      if (tagged.page_type && currentPage && tagged.page_type !== currentPage.page_type) {
+        updateData.page_type = tagged.page_type;
+        console.log(`[tag] page_type 更新: ${currentPage.page_type} → ${tagged.page_type}`);
+      }
+
       const { error: updateError } = await supabase
         .from("pages")
-        .update({
-          design_tone: tagged.design_tone,
-          color_scheme: tagged.color_scheme,
-          layout_pattern: tagged.layout_pattern,
-          typography_tags: tagged.typography,
-          navigation_tags: tagged.navigation,
-          conversion_tags: tagged.conversion,
-          visual_material: tagged.visual_material,
-        })
+        .update(updateData)
         .eq("page_id", pageId);
 
       if (updateError)
@@ -299,11 +354,25 @@ async function main() {
 // ============================================================
 // プロンプト
 // ============================================================
-function buildTaggingPrompt(pageType: string): string {
+function buildTaggingPrompt(pageType: string, pageUrl: string): string {
+  // page_type が「その他・未分類」の場合、AI にページ種別判定を依頼
+  const pageTypeSection = pageType === "その他・未分類"
+    ? `## ページ情報
+- URL: ${pageUrl}
+- 現在の page_type: ${pageType}（未分類）
+
+## ページ種別判定
+現在「その他・未分類」になっています。スクリーンショットとURLから、最も適切なページ種別を以下の候補から1つ選んでください:
+${VALID_PAGE_TYPES.filter((t) => t !== "その他・未分類").join("、")}
+
+判定できない場合は null としてください。`
+    : `## ページ情報
+- URL: ${pageUrl}
+- page_type: ${pageType}`;
+
   return `あなたはWebデザインの専門家です。スクリーンショットを見て、以下の分類軸ごとにタグを選択してください。
 
-## ページ種別
-${pageType}
+${pageTypeSection}
 
 ## 分類ルール
 - 各軸から当てはまるタグを1〜3個選ぶ
@@ -346,7 +415,8 @@ ${TAG_DEFINITIONS.visual_material.join("、")}
   "typography": ["タグ1", "タグ2"],
   "navigation": ["タグ1"],
   "conversion": ["タグ1", "タグ2"],
-  "visual_material": ["タグ1"]
+  "visual_material": ["タグ1"],
+  "page_type": "ページ種別（未分類の場合のみ判定、それ以外はnull）"
 }`;
 }
 
@@ -362,6 +432,12 @@ function parseTagResponse(text: string): TagResult {
   const toArray = (v: unknown): string[] =>
     Array.isArray(v) ? v.filter((s) => typeof s === "string") : [];
 
+  // page_type のバリデーション: 有効値リストに含まれる場合のみ採用
+  let pageType: string | null = null;
+  if (typeof parsed.page_type === "string" && VALID_PAGE_TYPES.includes(parsed.page_type)) {
+    pageType = parsed.page_type;
+  }
+
   return {
     design_tone: toArray(parsed.design_tone),
     color_scheme: toArray(parsed.color_scheme),
@@ -370,6 +446,7 @@ function parseTagResponse(text: string): TagResult {
     navigation: toArray(parsed.navigation),
     conversion: toArray(parsed.conversion),
     visual_material: toArray(parsed.visual_material),
+    page_type: pageType,
   };
 }
 

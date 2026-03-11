@@ -58,7 +58,14 @@ const PATH_PATTERNS: { pattern: RegExp; pageType: PageType }[] = [
   { pattern: /\/(lp|landing)/i, pageType: "LP（ランディングページ）" },
   { pattern: /\/(compare|feature|特長|比較)/i, pageType: "比較・特長" },
   { pattern: /\/(product|item|detail|商品)/i, pageType: "商品・物件・案件詳細" },
-  { pattern: /\/(faq|よくある質問)/i, pageType: "その他・未分類" },
+  { pattern: /\/(search|results|検索)/i, pageType: "検索結果・一覧" },
+  { pattern: /\/(404|not-found)/i, pageType: "404" },
+  { pattern: /\/(error|maintenance|メンテナンス)/i, pageType: "エラー・メンテナンス" },
+  { pattern: /\/(thanks|thank-you|complete|完了)/i, pageType: "サンクス・完了" },
+  { pattern: /\/(dashboard|mypage|マイページ)/i, pageType: "ダッシュボード・マイページ" },
+  { pattern: /\/(onboarding|tutorial|getting-started)/i, pageType: "Onboarding・チュートリアル" },
+  { pattern: /\/(ranking|popular|おすすめ)/i, pageType: "ランキング・おすすめ" },
+  { pattern: /\/(gallery|catalog|一覧)/i, pageType: "検索結果・一覧" },
 ];
 
 // ============================================================
@@ -373,7 +380,9 @@ function isDisallowed(
 // ============================================================
 function classifyPageType(url: string): PageType {
   try {
-    const pathname = new URL(url).pathname;
+    let pathname = new URL(url).pathname;
+    // ロケールプレフィックスを除去（/en/, /ja/, /zh-cn/ 等）
+    pathname = pathname.replace(/^\/[a-z]{2}(-[a-z]{2})?\//i, "/");
     for (const { pattern, pageType } of PATH_PATTERNS) {
       if (pattern.test(pathname)) {
         return pageType;
