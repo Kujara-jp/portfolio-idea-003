@@ -36,6 +36,7 @@ type Confidence = "high" | "medium" | "low";
 
 interface ScoreResult {
   is_blocked: boolean;
+  has_overlay: boolean;
   quality_score: number | null;
   quality_reasons: string[];
   responsive_score: number | null;
@@ -256,6 +257,11 @@ async function main() {
         .eq("page_id", pageId);
       if (pageError) throw new Error(`pages 更新エラー: ${pageError.message}`);
 
+      if (scored.has_overlay) {
+        console.warn(
+          `[score] ⚠️ オーバーレイ検出 page_id=${pageId} → needs_review=true（再収集推奨）`,
+        );
+      }
       if (scored.quality_score == null) {
         console.warn(
           `[score] ⚠️ quality_score欠落 page_id=${pageId} → needs_review=true`,
@@ -300,6 +306,10 @@ If the screenshot clearly shows one of these PERMANENT error states, return is_b
 Also block if the page is completely blank/white with no content rendered at all, or shows only a loading spinner or skeleton placeholders with no actual content.
 
 IMPORTANT: Do NOT mark as blocked if the page has a minimalist design or intentional whitespace. These are valid design choices, not errors. A page with any intentional content (logo, text, navigation) is NOT blank even if the layout is very sparse.
+
+## Overlay / Obstruction Detection
+
+If a cookie consent banner, promotional popup, coupon overlay, newsletter signup, or similar element covers a significant portion (>30%) of the page content, set "has_overlay": true in your response. This does NOT make the page blocked — score the design based on what you can see behind the overlay, but lower confidence to "medium" or "low" depending on severity.
 
 If blocked:
 {
@@ -369,6 +379,7 @@ Provide exactly 2 reasons in Japanese citing specific visual differences.`
 ## Output Format (respond with ONLY this JSON, no other text)
 {
   "is_blocked": false,
+  "has_overlay": false,
   "quality_score": <integer 1-5>,
   "quality_reasons": ["<根拠1>", "<根拠2>", "<根拠3>"],
   ${
@@ -396,6 +407,7 @@ function parseScoreResponse(text: string, hasSpscreen: boolean): ScoreResult {
   const parsed = JSON.parse(match[0]);
 
   const is_blocked = parsed.is_blocked === true;
+  const has_overlay = parsed.has_overlay === true;
 
   // ブロック時はスコアをnullで返す（AGENT.md準拠: センチネル値禁止）
   // NaN（非数値レスポンス "N/A" 等）もnullとして扱う
@@ -423,16 +435,18 @@ function parseScoreResponse(text: string, hasSpscreen: boolean): ScoreResult {
       : rawConfidence === "medium"
         ? "medium"
         : "low";
-  // confidence が low、欠落/不正、またはスコア欠落の場合は needs_review を強制する
+  // confidence が low、欠落/不正、スコア欠落、またはオーバーレイ検出の場合は needs_review を強制する
   const needs_review =
     confidence === "low" ||
     !["high", "medium", "low"].includes(rawConfidence) ||
     qualityMissing ||
     responsiveMissing ||
+    has_overlay ||
     parsed.needs_review === true;
 
   return {
     is_blocked,
+    has_overlay,
     quality_score,
     quality_reasons: Array.isArray(parsed.quality_reasons)
       ? parsed.quality_reasons
