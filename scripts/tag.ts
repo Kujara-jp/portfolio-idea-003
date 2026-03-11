@@ -23,7 +23,7 @@ import { createClient } from "@supabase/supabase-js";
 // 設定
 // ============================================================
 const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY!;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_ANON_KEY!;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY!;
 
 const args = process.argv.slice(2);
@@ -34,7 +34,7 @@ const RECLASSIFY_MODE = args.includes("--reclassify");
 const POLL_INTERVAL_MS = 30_000; // 30秒おきにポーリング
 const MAX_WAIT_MS = 25 * 60 * 1000; // 最大25分待機
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
 // ============================================================
