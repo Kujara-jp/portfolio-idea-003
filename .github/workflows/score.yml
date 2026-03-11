@@ -1,6 +1,10 @@
 name: design-vault score & tag
 
 on:
+  # 毎日 JST 18:30
+  schedule:
+    - cron: "30 9 * * *" # UTC 9:30 = JST 18:30
+
   # collect 完了後に自動トリガー
   workflow_run:
     workflows: ["design-vault collect"]
@@ -14,10 +18,14 @@ on:
         required: false
         default: "100"
 
+concurrency:
+  group: score
+  cancel-in-progress: false
+
 jobs:
   score:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
@@ -38,7 +46,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          LIMIT=${{ github.event.inputs.limit || '50' }}
+          LIMIT=${{ github.event.inputs.limit || '80' }}
           npx tsx scripts/score.ts --limit=$LIMIT
 
       - name: Run tag script
@@ -47,7 +55,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          LIMIT=${{ github.event.inputs.limit || '50' }}
+          LIMIT=${{ github.event.inputs.limit || '80' }}
           npx tsx scripts/tag.ts --limit=$LIMIT
 
       - name: Run industry classification script
@@ -56,5 +64,5 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          LIMIT=${{ github.event.inputs.limit || '50' }}
+          LIMIT=${{ github.event.inputs.limit || '80' }}
           npx tsx scripts/industry.ts --limit=$LIMIT
