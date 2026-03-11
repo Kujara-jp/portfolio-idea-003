@@ -24,6 +24,8 @@ const args = process.argv.slice(2);
 const limitArg = args.find((a) => a.startsWith("--limit="));
 const BATCH_LIMIT = limitArg ? parseInt(limitArg.split("=")[1]) : 5;
 const RESCORE_MODE = args.includes("--rescore");
+const offsetArg = args.find((a) => a.startsWith("--offset="));
+const OFFSET = offsetArg ? parseInt(offsetArg.split("=")[1]) : 0;
 
 const POLL_INTERVAL_MS = 30_000; // 30秒おきにポーリング
 const MAX_WAIT_MS = 25 * 60 * 1000; // 最大25分待機
@@ -51,7 +53,7 @@ interface ScoreResult {
 // メイン処理
 // ============================================================
 async function main() {
-  console.log(`[score] 開始（最大${BATCH_LIMIT}件${RESCORE_MODE ? " / 再キャリブレーションモード" : ""}）`);
+  console.log(`[score] 開始（最大${BATCH_LIMIT}件${RESCORE_MODE ? ` / 再キャリブレーションモード / offset=${OFFSET}` : ""}）`);
 
   // ページ取得（ブロック済みは除外）
   // rescore: 全ページ対象 / 通常: 未採点のみ
@@ -60,7 +62,8 @@ async function main() {
     .select("page_id, site_id, screenshot_pc, screenshot_sp, page_type, page_url, sites(url, target_user)")
     .or("is_blocked.eq.false,is_blocked.is.null")
     .not("screenshot_pc", "is", null)
-    .limit(BATCH_LIMIT);
+    .order("page_id", { ascending: true })
+    .range(OFFSET, OFFSET + BATCH_LIMIT - 1);
 
   if (!RESCORE_MODE) {
     query = query.is("responsive_score", null);
