@@ -5,16 +5,17 @@
  * 実行方法:
  *   npx ts-node scripts/collect.ts
  *   npx ts-node scripts/collect.ts --limit=5
+ *   npx tsx scripts/collect.ts --seo-only --limit=50
  */
 
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 import { createClient } from "@supabase/supabase-js";
 
 // ============================================================
 // 設定
 // ============================================================
 const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY!;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
 const STORAGE_BUCKET = "screenshots";
 
 const VIEWPORT_PC = { width: 1280, height: 800 };
@@ -23,16 +24,183 @@ const VIEWPORT_SP = { width: 375, height: 812 };
 const args = process.argv.slice(2);
 const limitArg = args.find((a) => a.startsWith("--limit="));
 const BATCH_LIMIT = limitArg ? parseInt(limitArg.split("=")[1]) : 10;
+const SEO_ONLY_MODE = args.includes("--seo-only");
 
 // ============================================================
 // Supabase クライアント
 // ============================================================
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ============================================================
+// SEOデータ型定義
+// ============================================================
+interface SeoData {
+  seo_page_title: string | null;
+  seo_meta_description: string | null;
+  seo_og_title: string | null;
+  seo_og_description: string | null;
+  seo_h1_text: string | null;
+  seo_h2_texts: string[];
+  seo_catchcopy_text: string | null;
+  seo_cta_text: string | null;
+  seo_footer_cta_text: string | null;
+  seo_nav_texts: string[];
+  seo_keywords_top10: string[];
+  seo_social_proof_texts: string[];
+  seo_testimonial_texts: string[];
+  seo_faq_texts: string[];
+  seo_alt_texts_sample: string[];
+  seo_structured_data_type: string[];
+}
+
+const EMPTY_SEO_DATA: SeoData = {
+  seo_page_title: null,
+  seo_meta_description: null,
+  seo_og_title: null,
+  seo_og_description: null,
+  seo_h1_text: null,
+  seo_h2_texts: [],
+  seo_catchcopy_text: null,
+  seo_cta_text: null,
+  seo_footer_cta_text: null,
+  seo_nav_texts: [],
+  seo_keywords_top10: [],
+  seo_social_proof_texts: [],
+  seo_testimonial_texts: [],
+  seo_faq_texts: [],
+  seo_alt_texts_sample: [],
+  seo_structured_data_type: [],
+};
+
+// ============================================================
+// SEOデータ抽出（page.evaluate でDOM解析）
+// ============================================================
+async function extractSeoData(page: Page): Promise<SeoData> {
+  try {
+    return await page.evaluate(`(() => {
+      var txt = function(el) {
+        return el && el.textContent ? el.textContent.trim().replace(/\\s+/g, " ").slice(0, 500) : null;
+      };
+      var attr = function(sel, a) {
+        var el = document.querySelector(sel);
+        return el ? (el.getAttribute(a) || "").trim() || null : null;
+      };
+
+      var seo_page_title = document.title ? document.title.trim() : null;
+      var seo_meta_description = attr('meta[name="description"]', "content");
+      var seo_og_title = attr('meta[property="og:title"]', "content");
+      var seo_og_description = attr('meta[property="og:description"]', "content");
+
+      var h1 = document.querySelector("h1");
+      var seo_h1_text = txt(h1);
+      var seo_h2_texts = Array.from(document.querySelectorAll("h2"))
+        .map(function(el) { return el.textContent ? el.textContent.trim().replace(/\\s+/g, " ") : ""; })
+        .filter(Boolean).slice(0, 20);
+
+      var seo_catchcopy_text = null;
+      var hero = document.querySelector('[class*="hero"], [class*="kv"], [class*="main-visual"], [class*="fv"], [id*="hero"]');
+      if (hero) {
+        var heroText = hero.querySelector('p, .catch, [class*="catch"], [class*="copy"], [class*="lead"]');
+        if (heroText) seo_catchcopy_text = txt(heroText);
+      }
+
+      var mainCta = document.querySelector('a[class*="cta"], button[class*="cta"], a[class*="btn-primary"], .hero a, .kv a, [class*="hero"] a[class*="btn"]');
+      var seo_cta_text = txt(mainCta);
+
+      var footerCta = document.querySelector('footer a[class*="cta"], footer a[class*="btn"], footer button[class*="cta"]');
+      var seo_footer_cta_text = txt(footerCta);
+
+      var nav = document.querySelector('nav, header nav, [role="navigation"]');
+      var seo_nav_texts = nav
+        ? Array.from(nav.querySelectorAll("a"))
+            .map(function(a) { return a.textContent ? a.textContent.trim() : ""; })
+            .filter(function(t) { return t.length > 0 && t.length < 50; }).slice(0, 20)
+        : [];
+
+      var bodyText = document.body ? document.body.innerText || "" : "";
+      var words = bodyText.split(/[\\s\\u3001\\u3002\\uff01\\uff1f\\n\\r\\t,.!?;:()\\uff08\\uff09\\u300c\\u300d\\u300e\\u300f\\u3010\\u3011]+/)
+        .map(function(w) { return w.trim(); })
+        .filter(function(w) { return w.length >= 2 && w.length <= 20; });
+      var freq = {};
+      var stopWords = ["\\u3059\\u308b","\\u3053\\u3068","\\u305f\\u3081","\\u3082\\u306e","\\u305d\\u308c","\\u3053\\u308c","\\u3042\\u308a","\\u306a\\u3044","\\u3067\\u3059","\\u307e\\u3059","\\u3057\\u305f","\\u304b\\u3089","\\u3088\\u3046","The","the","and","for","that","this","with","you","are","have","our","more","about","your"];
+      words.forEach(function(w) {
+        if (stopWords.indexOf(w) === -1) freq[w] = (freq[w] || 0) + 1;
+      });
+      var seo_keywords_top10 = Object.entries(freq)
+        .sort(function(a, b) { return b[1] - a[1]; }).slice(0, 10)
+        .map(function(e) { return e[0]; });
+
+      var proofPattern = /(\\d[\\d,.]+[\\s]*[\\u793e\\u4ef6\\u540d\\u4e07\\u4eba%\\uff0b+]|\\u5c0e\\u5165|\\u5b9f\\u7e3e|\\u53d7\\u8cde|No\\.\\s*1)/;
+      var seo_social_proof_texts = Array.from(document.querySelectorAll("p, span, div, li, dt, dd"))
+        .map(function(el) { return el.textContent ? el.textContent.trim() : ""; })
+        .filter(function(t) { return t.length > 5 && t.length < 200 && proofPattern.test(t); })
+        .slice(0, 10);
+
+      var testimonialSection = document.querySelector('[class*="testimonial"], [class*="voice"], [class*="review"], [id*="voice"]');
+      var seo_testimonial_texts = testimonialSection
+        ? Array.from(testimonialSection.querySelectorAll('p, blockquote, [class*="text"]'))
+            .map(function(el) { return el.textContent ? el.textContent.trim().replace(/\\s+/g, " ") : ""; })
+            .filter(function(t) { return t.length > 10 && t.length < 500; }).slice(0, 5)
+        : [];
+
+      var faqSection = document.querySelector('[class*="faq"], [class*="accordion"], [id*="faq"], details');
+      var seo_faq_texts = faqSection
+        ? Array.from(faqSection.querySelectorAll('summary, dt, [class*="question"], h3, h4'))
+            .map(function(el) { return el.textContent ? el.textContent.trim() : ""; })
+            .filter(function(t) { return t.length > 3 && t.length < 300; }).slice(0, 10)
+        : [];
+
+      var seo_alt_texts_sample = Array.from(document.querySelectorAll("img[alt]"))
+        .map(function(img) { return (img.getAttribute("alt") || "").trim(); })
+        .filter(function(t) { return t.length > 2 && t.length < 200; }).slice(0, 5);
+
+      var ldScripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+      var seo_structured_data_type = [];
+      ldScripts.forEach(function(script) {
+        try {
+          var json = JSON.parse(script.textContent || "");
+          var types = Array.isArray(json) ? json.map(function(j) { return j["@type"]; }) : [json["@type"]];
+          types.filter(Boolean).forEach(function(t) {
+            if (seo_structured_data_type.indexOf(t) === -1) seo_structured_data_type.push(t);
+          });
+        } catch(e) {}
+      });
+
+      return {
+        seo_page_title: seo_page_title,
+        seo_meta_description: seo_meta_description,
+        seo_og_title: seo_og_title,
+        seo_og_description: seo_og_description,
+        seo_h1_text: seo_h1_text,
+        seo_h2_texts: seo_h2_texts,
+        seo_catchcopy_text: seo_catchcopy_text,
+        seo_cta_text: seo_cta_text,
+        seo_footer_cta_text: seo_footer_cta_text,
+        seo_nav_texts: seo_nav_texts,
+        seo_keywords_top10: seo_keywords_top10,
+        seo_social_proof_texts: seo_social_proof_texts,
+        seo_testimonial_texts: seo_testimonial_texts,
+        seo_faq_texts: seo_faq_texts,
+        seo_alt_texts_sample: seo_alt_texts_sample,
+        seo_structured_data_type: seo_structured_data_type
+      };
+    })()`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`[collect]   SEOデータ抽出スキップ: ${msg}`);
+    return { ...EMPTY_SEO_DATA };
+  }
+}
 
 // ============================================================
 // メイン処理
 // ============================================================
 async function main() {
+  if (SEO_ONLY_MODE) {
+    await runSeoOnly();
+    return;
+  }
+
   console.log(`[collect] 開始 (最大${BATCH_LIMIT}件)`);
 
   const { data: queue, error: queueError } = await supabase
@@ -66,7 +234,7 @@ async function main() {
       .eq("queue_id", item.queue_id);
 
     try {
-      const { screenshotPc, screenshotSp } = await takeScreenshots(
+      const { screenshotPc, screenshotSp, seoData } = await takeScreenshots(
         browser,
         item.url,
       );
@@ -111,6 +279,7 @@ async function main() {
           screenshot_pc: pcUrl,
           screenshot_sp: spUrl,
           needs_review: true,
+          ...seoData,
         },
         { onConflict: "site_id,page_url" },
       );
@@ -150,12 +319,22 @@ async function main() {
 // ============================================================
 // スクリーンショット撮影
 // ============================================================
-async function takeScreenshots(browser: Browser, url: string) {
+async function takeScreenshots(
+  browser: Browser,
+  url: string,
+): Promise<{ screenshotPc: Buffer; screenshotSp: Buffer; seoData: SeoData }> {
   const pcContext = await browser.newContext({ viewport: VIEWPORT_PC });
   const pcPage = await pcContext.newPage();
   await pcPage.goto(url, { waitUntil: "networkidle", timeout: 30000 });
   await pcPage.waitForTimeout(1500);
   await dismissOverlays(pcPage);
+
+  // SEOデータ抽出（PCページから。SPは同一HTMLなので不要）
+  const seoData = await extractSeoData(pcPage);
+  if (seoData.seo_page_title) {
+    console.log(`[collect]   SEO: title="${seoData.seo_page_title}"`);
+  }
+
   const screenshotPc = await pcPage.screenshot({ fullPage: false });
   await pcContext.close();
 
@@ -167,7 +346,7 @@ async function takeScreenshots(browser: Browser, url: string) {
   const screenshotSp = await spPage.screenshot({ fullPage: false });
   await spContext.close();
 
-  return { screenshotPc, screenshotSp };
+  return { screenshotPc, screenshotSp, seoData };
 }
 
 // ============================================================
@@ -306,6 +485,69 @@ async function dismissOverlays(page: import("playwright").Page): Promise<void> {
     // オーバーレイ消去は best-effort なのでエラーは無視
     console.log(`[collect]   オーバーレイ消去スキップ（エラー）`);
   }
+}
+
+// ============================================================
+// --seo-only モード: 既存ページのSEOデータのみ収集
+// ============================================================
+async function runSeoOnly() {
+  console.log(`[collect] SEO-onlyモード開始 (最大${BATCH_LIMIT}件)`);
+
+  const { data: pages, error } = await supabase
+    .from("pages")
+    .select("page_id, page_url")
+    .is("seo_page_title", null)
+    .not("screenshot_pc", "is", null)
+    .limit(BATCH_LIMIT);
+
+  if (error) {
+    console.error("[collect] ページ取得エラー:", error.message);
+    process.exit(1);
+  }
+
+  if (!pages || pages.length === 0) {
+    console.log("[collect] SEO未収集ページなし。終了します。");
+    return;
+  }
+
+  console.log(`[collect] ${pages.length}件のSEOデータを収集します`);
+
+  const browser = await chromium.launch();
+
+  for (const page of pages) {
+    console.log(`\n[collect] SEO収集: ${page.page_url}`);
+    try {
+      const context = await browser.newContext({ viewport: VIEWPORT_PC });
+      const browserPage = await context.newPage();
+      await browserPage.goto(page.page_url, {
+        waitUntil: "networkidle",
+        timeout: 30000,
+      });
+      await browserPage.waitForTimeout(1500);
+      await dismissOverlays(browserPage);
+
+      const seoData = await extractSeoData(browserPage);
+      await context.close();
+
+      const { error: updateError } = await supabase
+        .from("pages")
+        .update(seoData)
+        .eq("page_id", page.page_id);
+
+      if (updateError) {
+        throw new Error(`pages更新エラー: ${updateError.message}`);
+      }
+
+      const title = seoData.seo_page_title ?? "(なし)";
+      console.log(`[collect] SEO完了: title="${title}"`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[collect] SEOエラー: ${page.page_url} - ${message}`);
+    }
+  }
+
+  await browser.close();
+  console.log("\n[collect] SEO-only 全処理完了");
 }
 
 // ============================================================

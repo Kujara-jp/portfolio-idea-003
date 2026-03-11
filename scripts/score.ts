@@ -7,6 +7,7 @@
  * 実行方法:
  *   npx tsx scripts/score.ts
  *   npx tsx scripts/score.ts --limit=5
+ *   npx tsx scripts/score.ts --rescore --limit=5  (再キャリブレーション)
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -22,6 +23,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY!;
 const args = process.argv.slice(2);
 const limitArg = args.find((a) => a.startsWith("--limit="));
 const BATCH_LIMIT = limitArg ? parseInt(limitArg.split("=")[1]) : 5;
+const RESCORE_MODE = args.includes("--rescore");
 
 const POLL_INTERVAL_MS = 30_000; // 30秒おきにポーリング
 const MAX_WAIT_MS = 25 * 60 * 1000; // 最大25分待機
@@ -49,17 +51,22 @@ interface ScoreResult {
 // メイン処理
 // ============================================================
 async function main() {
-  console.log(`[score] 開始（最大${BATCH_LIMIT}件）`);
+  console.log(`[score] 開始（最大${BATCH_LIMIT}件${RESCORE_MODE ? " / 再キャリブレーションモード" : ""}）`);
 
-  // 未採点のページを取得（ブロック済みは除外）
-  // sites.target_user をJOINで取得（⑦クオリティスコアのターゲット適合度評価に必要）
-  const { data: pages, error } = await supabase
+  // ページ取得（ブロック済みは除外）
+  // rescore: 全ページ対象 / 通常: 未採点のみ
+  let query = supabase
     .from("pages")
     .select("page_id, site_id, screenshot_pc, screenshot_sp, page_type, page_url, sites(url, target_user)")
-    .is("responsive_score", null)
     .or("is_blocked.eq.false,is_blocked.is.null")
     .not("screenshot_pc", "is", null)
     .limit(BATCH_LIMIT);
+
+  if (!RESCORE_MODE) {
+    query = query.is("responsive_score", null);
+  }
+
+  const { data: pages, error } = await query;
 
   if (error) {
     console.error("[score] ページ取得エラー:", error.message);
@@ -85,7 +92,6 @@ async function main() {
         ? await fetchImageAsBase64(page.screenshot_sp!)
         : null;
 
-      // page_type は将来の採点基準拡張のために保持（現在は未使用）
       // sites.target_user: ターゲット適合度評価のためプロンプトに渡す（AGENT.md準拠）
       // Supabase PostgREST: many-to-one JOINは単一オブジェクトで返る
       const siteRelation = page.sites;
@@ -94,7 +100,7 @@ async function main() {
         | null
         | undefined;
       const targetUser = siteData?.target_user ?? undefined;
-      const prompt = buildScoringPrompt(hasSpScreenshot, targetUser);
+      const prompt = buildScoringPrompt(hasSpScreenshot, targetUser, page.page_type);
       const pcMediaType = detectMediaType(page.screenshot_pc);
       const spMediaType = page.screenshot_sp
         ? detectMediaType(page.screenshot_sp)
@@ -288,9 +294,61 @@ async function main() {
 }
 
 // ============================================================
+// pageType別 追加評価基準
+// ============================================================
+const PAGE_TYPE_CRITERIA: Record<string, string> = {
+  "コーポレートサイト": `追加評価ポイント:
+- ブランドの信頼感・安心感が伝わるか
+- 企業理念やビジョンが視覚的に表現されているか
+- グローバルナビゲーションが明確で網羅的か`,
+
+  "LP（ランディングページ）": `追加評価ポイント:
+- CTAの視認性と誘導力（ファーストビューにCTAがあるか）
+- コンバージョンへの導線設計（AIDMA/AISAS等のフロー）
+- 信頼性要素（実績数・お客様の声・メディア掲載等）の配置`,
+
+  "ECサイト": `追加評価ポイント:
+- 商品写真の見せ方とグリッド設計
+- 検索・フィルタのUIが直感的か
+- 購入導線（カート追加→決済）の明快さ`,
+
+  "採用サイト": `追加評価ポイント:
+- ターゲット人材に刺さるビジュアル表現か
+- 社風・カルチャーが視覚的に伝わるか
+- エントリー導線の明確さ`,
+
+  "ブログ・オウンドメディア": `追加評価ポイント:
+- 記事の可読性（行間・文字サイズ・カラム幅）
+- カテゴリ・タグの整理と回遊設計
+- アイキャッチ画像の統一感`,
+
+  "お問い合わせ": `追加評価ポイント:
+- フォームの入力しやすさ（ラベル・バリデーション）
+- 入力項目数の適切さ（多すぎないか）
+- 送信前の安心感（プライバシーポリシーリンク等）`,
+
+  "事例・実績": `追加評価ポイント:
+- 事例の見せ方（ビフォーアフター・数値成果・ストーリー）
+- フィルタ・検索による探しやすさ
+- 個別事例ページへの誘導設計`,
+
+  "商品・物件・案件詳細": `追加評価ポイント:
+- 写真ギャラリーのUI（スワイプ・ズーム等）
+- スペック・価格情報の視認性
+- 関連商品・類似物件へのレコメンド導線`,
+};
+
+// ============================================================
 // Claude Vision API 採点プロンプト
 // ============================================================
-function buildScoringPrompt(hasSpScreenshot: boolean, targetUser?: string[]): string {
+function buildScoringPrompt(hasSpScreenshot: boolean, targetUser?: string[], pageType?: string): string {
+  const extraCriteria = pageType ? PAGE_TYPE_CRITERIA[pageType] ?? null : null;
+  const pageTypeSection = extraCriteria
+    ? `\n\nこのページは「${pageType}」です。上記5基準に加えて以下も考慮:\n${extraCriteria}`
+    : pageType && pageType !== "その他・未分類"
+      ? `\nこのページは「${pageType}」です。種別の目的に照らして適切にデザインされているか考慮してください。`
+      : '';
+
   return `
 You are a web design evaluator. Score based primarily on what is visually observable in the screenshot(s). Do not guess or assume anything not visible, except when target user information is provided below for evaluating target fit.
 
@@ -349,7 +407,7 @@ ${
   targetUser && targetUser.length > 0
     ? `\nTarget user for criterion 5: ${targetUser.join(", ")}.`
     : ``
-}
+}${pageTypeSection}
 
 Provide exactly 3 reasons in Japanese citing specific visual evidence.
 
