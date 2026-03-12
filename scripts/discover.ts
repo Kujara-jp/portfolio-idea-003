@@ -19,6 +19,7 @@
 
 import { chromium, type Browser } from "playwright";
 import { createClient } from "@supabase/supabase-js";
+import { canonicalizeUrl, normalizeForDedup } from "./lib/normalize";
 
 // ============================================================
 // 設定
@@ -176,14 +177,14 @@ async function discoverSubpages(
   }
 
   // 4. フィルタリング: 同一オリジン、robots.txt除外、ホームページ自身を除外
-  const normalizedSiteUrl = normalizeUrl(siteUrl);
+  const normalizedSiteUrl = normalizeForDedup(siteUrl);
   urls = urls.filter((url) => {
     try {
       if (new URL(url).origin !== origin) return false;
     } catch {
       return false;
     }
-    if (normalizeUrl(url) === normalizedSiteUrl) return false;
+    if (normalizeForDedup(url) === normalizedSiteUrl) return false;
     if (isDisallowed(url, origin, disallowRules)) return false;
     return true;
   });
@@ -204,12 +205,13 @@ async function discoverSubpages(
 
   // 7. collect_queue に投入
   const queueItems = selected.map((item) => ({
-    url: item.url,
+    url: canonicalizeUrl(item.url),
     site_id: siteId,
     page_type: item.pageType,
     priority: 5,
     status: "pending",
     source: "discover",
+    normalized_url: normalizeForDedup(item.url),
   }));
 
   const { error: insertError } = await supabase
@@ -402,8 +404,11 @@ function selectSubpages(
   existingUrls: Set<string>,
 ): { url: string; pageType: PageType }[] {
   // 既存URLと重複するものを除外（UNIQUE制約: site_id, page_url）
+  const existingNormalized = new Set(
+    Array.from(existingUrls).map((u) => normalizeForDedup(u)),
+  );
   const candidates = classified.filter(
-    (item) => !existingUrls.has(item.url),
+    (item) => !existingNormalized.has(normalizeForDedup(item.url)),
   );
 
   // 認識済みページ種別（その他以外）を優先
@@ -438,13 +443,6 @@ function selectSubpages(
   }
 
   return result.slice(0, MAX_SUBPAGES);
-}
-
-// ============================================================
-// ユーティリティ
-// ============================================================
-function normalizeUrl(url: string): string {
-  return url.toLowerCase().replace(/\/$/, "").replace(/^https?:\/\//, "");
 }
 
 // ============================================================

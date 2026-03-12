@@ -10,6 +10,7 @@
 
 import { chromium, type Browser, type Page } from "playwright";
 import { createClient } from "@supabase/supabase-js";
+import { canonicalizeUrl, extractDomain } from "./lib/normalize";
 
 // ============================================================
 // 設定
@@ -251,11 +252,12 @@ async function main() {
       if (item.site_id) {
         siteId = item.site_id;
       } else {
+        const canonicalUrl = canonicalizeUrl(item.url);
         const { data: site, error: siteError } = await supabase
           .from("sites")
           .upsert(
             {
-              url: item.url,
+              url: canonicalUrl,
               name: item.site_name ?? extractDomain(item.url),
               region: detectRegion(item.url),
               collected_at: new Date().toISOString(),
@@ -275,7 +277,7 @@ async function main() {
         {
           site_id: siteId,
           page_type: item.page_type || "その他・未分類",
-          page_url: item.url,
+          page_url: canonicalizeUrl(item.url),
           screenshot_pc: pcUrl,
           screenshot_sp: spUrl,
           needs_review: true,
@@ -583,14 +585,6 @@ function urlToKey(url: string): string {
     .replace(/^https?:\/\//, "")
     .replace(/[^a-zA-Z0-9.-]/g, "_")
     .replace(/_+$/, "");
-}
-
-function extractDomain(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
 }
 
 // 日本TLD一覧

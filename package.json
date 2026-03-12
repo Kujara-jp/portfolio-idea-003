@@ -10,7 +10,8 @@
     "tag": "dotenv -e .env.local -- tsx scripts/tag.ts",
     "collect": "dotenv -e .env.local -- tsx scripts/collect.ts",
     "score": "dotenv -e .env.local -- tsx scripts/score.ts",
-    "embed": "dotenv -e .env.local -- tsx scripts/embed.ts"
+    "embed": "dotenv -e .env.local -- tsx scripts/embed.ts",
+    "dedup": "dotenv -e .env.local -- tsx scripts/dedup.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

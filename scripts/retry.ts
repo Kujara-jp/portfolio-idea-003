@@ -10,6 +10,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { canonicalizeUrl, normalizeForDedup } from "./lib/normalize";
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
@@ -88,18 +89,20 @@ async function main() {
         .eq("site_id", site.site_id);
 
       // 3. collect_queue に再投入（既に pending がなければ）
+      const siteNormalized = normalizeForDedup(site.url);
       const { data: existing } = await supabase
         .from("collect_queue")
         .select("queue_id")
-        .eq("url", site.url)
+        .eq("normalized_url", siteNormalized)
         .eq("status", "pending")
         .limit(1);
 
       if (!existing || existing.length === 0) {
         await supabase.from("collect_queue").insert({
-          url: site.url,
+          url: canonicalizeUrl(site.url),
           status: "pending",
           priority: 5,
+          normalized_url: siteNormalized,
         });
       }
 

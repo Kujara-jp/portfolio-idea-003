@@ -13,6 +13,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { chromium } from "playwright";
+import { canonicalizeUrl, normalizeForDedup } from "./lib/normalize";
 
 // ============================================================
 // 設定
@@ -112,9 +113,10 @@ async function main() {
   // collect_queue に INSERT
   const { error } = await supabase.from("collect_queue").insert(
     toInsert.map((item) => ({
-      url: item.url,
+      url: canonicalizeUrl(item.url),
       status: "pending",
       priority: item.priority,
+      normalized_url: normalizeForDedup(item.url),
     })),
   );
 
@@ -146,8 +148,8 @@ async function fetchExistingUrls(): Promise<Set<string>> {
     supabase.from("collect_queue").select("url"),
   ]);
 
-  for (const s of sites ?? []) urls.add(normalizeUrl(s.url));
-  for (const q of queue ?? []) urls.add(normalizeUrl(q.url));
+  for (const s of sites ?? []) urls.add(normalizeForDedup(s.url));
+  for (const q of queue ?? []) urls.add(normalizeForDedup(q.url));
 
   return urls;
 }
@@ -188,7 +190,7 @@ async function harvestAwwwards(
       const links = Array.from(document.querySelectorAll("a"))
         .map((a) => a.href)
         .filter((h) => h.match(/awwwards\.com\/sites\/[^/]+$/));
-      return [...new Set(links)];
+      return Array.from(new Set(links));
     });
 
     console.log(`[harvest] Awwwards: ${slugLinks.length}件のslug取得`);
@@ -223,8 +225,8 @@ async function harvestAwwwards(
           }
         }, SNS_DOMAINS);
 
-        if (externalUrl && !existingUrls.has(normalizeUrl(externalUrl))) {
-          existingUrls.add(normalizeUrl(externalUrl));
+        if (externalUrl && !existingUrls.has(normalizeForDedup(externalUrl))) {
+          existingUrls.add(normalizeForDedup(externalUrl));
           results.push({ url: externalUrl, source: "awwwards", priority: 1 });
         }
       } catch (err) {
@@ -299,8 +301,8 @@ async function harvestCSSDA(
     console.log(`[harvest] CSSDA: ${siteUrls.length}件のURL取得`);
 
     for (const url of siteUrls.slice(0, 30)) {
-      if (!existingUrls.has(normalizeUrl(url))) {
-        existingUrls.add(normalizeUrl(url));
+      if (!existingUrls.has(normalizeForDedup(url))) {
+        existingUrls.add(normalizeForDedup(url));
         results.push({ url, source: "cssda", priority: 1 });
       }
     }
@@ -355,8 +357,8 @@ async function harvestTavily(
         try {
           const parsed = new URL(result.url);
           const normalized = `${parsed.protocol}//${parsed.hostname}`;
-          if (!existingUrls.has(normalizeUrl(normalized))) {
-            existingUrls.add(normalizeUrl(normalized));
+          if (!existingUrls.has(normalizeForDedup(normalized))) {
+            existingUrls.add(normalizeForDedup(normalized));
             results.push({ url: normalized, source: "tavily", priority: 2 });
           }
         } catch {
@@ -377,13 +379,6 @@ async function harvestTavily(
 // ============================================================
 // ユーティリティ
 // ============================================================
-function normalizeUrl(url: string): string {
-  return url
-    .toLowerCase()
-    .replace(/\/$/, "")
-    .replace(/^https?:\/\//, "");
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
