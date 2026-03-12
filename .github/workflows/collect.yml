@@ -79,3 +79,10 @@ jobs:
           NODE_OPTIONS: "--max-old-space-size=2048"
         run: |
           npx tsx scripts/discover.ts --limit=50
+
+      - name: Backfill section DOM data
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
+        run: npx tsx scripts/collect.ts --sections-only --limit=50
+        continue-on-error: true
