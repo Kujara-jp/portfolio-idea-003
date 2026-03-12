@@ -26,6 +26,7 @@ const args = process.argv.slice(2);
 const limitArg = args.find((a) => a.startsWith("--limit="));
 const BATCH_LIMIT = limitArg ? parseInt(limitArg.split("=")[1]) : 10;
 const SEO_ONLY_MODE = args.includes("--seo-only");
+const SECTIONS_ONLY_MODE = args.includes("--sections-only");
 
 // ============================================================
 // Supabase クライアント
@@ -194,9 +195,122 @@ async function extractSeoData(page: Page): Promise<SeoData> {
 }
 
 // ============================================================
+// セクションDOM抽出（page.evaluate でDOM解析）
+// ============================================================
+interface SectionRaw {
+  section_order: number;
+  heading_text: string | null;
+  has_cta: boolean;
+  estimated_height_vh: number | null;
+  dom_selector: string | null;
+  classes: string[];
+  id: string | null;
+  tag_name: string;
+}
+
+async function extractSectionData(page: Page): Promise<SectionRaw[]> {
+  try {
+    return await page.evaluate(`(() => {
+      var vh = window.innerHeight || document.documentElement.clientHeight || 800;
+
+      // main直下の子要素を優先、なければ body 直下の section/div/article
+      var main = document.querySelector("main");
+      var candidates;
+      if (main && main.children.length > 1) {
+        candidates = Array.from(main.children);
+      } else {
+        candidates = Array.from(document.body.children).filter(function(el) {
+          var tag = el.tagName.toLowerCase();
+          return tag === "section" || tag === "div" || tag === "article" || tag === "header" || tag === "footer" || tag === "aside";
+        });
+      }
+
+      // nav/header/footer も含めるため、body直下にあれば追加
+      if (main) {
+        var bodyHeader = document.body.querySelector(":scope > header");
+        var bodyFooter = document.body.querySelector(":scope > footer");
+        var bodyNav = document.body.querySelector(":scope > nav");
+        if (bodyHeader && candidates.indexOf(bodyHeader) === -1) candidates.unshift(bodyHeader);
+        if (bodyNav && candidates.indexOf(bodyNav) === -1) candidates.splice(1, 0, bodyNav);
+        if (bodyFooter && candidates.indexOf(bodyFooter) === -1) candidates.push(bodyFooter);
+      }
+
+      // 小さすぎる要素（高さ20px未満）やscript/style/linkなどを除外
+      candidates = candidates.filter(function(el) {
+        var tag = el.tagName.toLowerCase();
+        if (tag === "script" || tag === "style" || tag === "link" || tag === "noscript" || tag === "br") return false;
+        var rect = el.getBoundingClientRect();
+        return rect.height >= 20;
+      });
+
+      var sections = [];
+      for (var i = 0; i < candidates.length; i++) {
+        var el = candidates[i];
+        var rect = el.getBoundingClientRect();
+
+        // 見出しテキスト取得（最初のh1/h2/h3）
+        var headingEl = el.querySelector("h1, h2, h3");
+        var headingText = null;
+        if (headingEl && headingEl.textContent) {
+          headingText = headingEl.textContent.trim().replace(/\\s+/g, " ").slice(0, 200);
+        }
+
+        // CTA要素の有無
+        var hasCta = !!(
+          el.querySelector('a[class*="cta"], button[class*="cta"], a[class*="btn"], button[class*="btn"], a[class*="CTA"], button[class*="CTA"]')
+        );
+
+        // 高さ（vh単位）
+        var heightVh = Math.round((rect.height / vh) * 100);
+
+        // CSSセレクタ構築
+        var domSelector = null;
+        if (el.id) {
+          domSelector = "#" + el.id;
+        } else if (el.className && typeof el.className === "string") {
+          var cls = el.className.trim().split(/\\s+/).slice(0, 2).join(".");
+          if (cls) domSelector = el.tagName.toLowerCase() + "." + cls;
+        }
+        if (!domSelector) {
+          domSelector = el.tagName.toLowerCase() + ":nth-child(" + (i + 1) + ")";
+        }
+
+        // class/id属性
+        var classes = [];
+        if (el.className && typeof el.className === "string") {
+          classes = el.className.trim().split(/\\s+/).filter(Boolean).slice(0, 10);
+        }
+
+        sections.push({
+          section_order: i,
+          heading_text: headingText,
+          has_cta: hasCta,
+          estimated_height_vh: heightVh,
+          dom_selector: domSelector,
+          classes: classes,
+          id: el.id || null,
+          tag_name: el.tagName.toLowerCase()
+        });
+      }
+
+      return sections;
+    })()`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`[collect]   セクションデータ抽出スキップ: ${msg}`);
+    return [];
+  }
+}
+
+// ============================================================
 // メイン処理
 // ============================================================
 async function main() {
+  if (SECTIONS_ONLY_MODE) {
+    await runSectionsOnly();
+    return;
+  }
+
   if (SEO_ONLY_MODE) {
     await runSeoOnly();
     return;
@@ -235,7 +349,7 @@ async function main() {
       .eq("queue_id", item.queue_id);
 
     try {
-      const { screenshotPc, screenshotSp, seoData } = await takeScreenshots(
+      const { screenshotPc, screenshotSp, seoData, sectionsRaw } = await takeScreenshots(
         browser,
         item.url,
       );
@@ -282,6 +396,7 @@ async function main() {
           screenshot_sp: spUrl,
           needs_review: true,
           ...seoData,
+          sections_raw: sectionsRaw.length > 0 ? sectionsRaw : null,
         },
         { onConflict: "site_id,page_url" },
       );
@@ -324,7 +439,7 @@ async function main() {
 async function takeScreenshots(
   browser: Browser,
   url: string,
-): Promise<{ screenshotPc: Buffer; screenshotSp: Buffer; seoData: SeoData }> {
+): Promise<{ screenshotPc: Buffer; screenshotSp: Buffer; seoData: SeoData; sectionsRaw: SectionRaw[] }> {
   const pcContext = await browser.newContext({ viewport: VIEWPORT_PC });
   const pcPage = await pcContext.newPage();
   await pcPage.goto(url, { waitUntil: "networkidle", timeout: 30000 });
@@ -335,6 +450,12 @@ async function takeScreenshots(
   const seoData = await extractSeoData(pcPage);
   if (seoData.seo_page_title) {
     console.log(`[collect]   SEO: title="${seoData.seo_page_title}"`);
+  }
+
+  // セクションDOM抽出
+  const sectionsRaw = await extractSectionData(pcPage);
+  if (sectionsRaw.length > 0) {
+    console.log(`[collect]   セクション: ${sectionsRaw.length}個検出`);
   }
 
   const screenshotPc = await pcPage.screenshot({ fullPage: false });
@@ -348,7 +469,7 @@ async function takeScreenshots(
   const screenshotSp = await spPage.screenshot({ fullPage: false });
   await spContext.close();
 
-  return { screenshotPc, screenshotSp, seoData };
+  return { screenshotPc, screenshotSp, seoData, sectionsRaw };
 }
 
 // ============================================================
@@ -550,6 +671,78 @@ async function runSeoOnly() {
 
   await browser.close();
   console.log("\n[collect] SEO-only 全処理完了");
+}
+
+// ============================================================
+// --sections-only モード: 既存ページのセクションDOMデータのみ収集
+// ============================================================
+async function runSectionsOnly() {
+  console.log(`[collect] sections-onlyモード開始 (最大${BATCH_LIMIT}件)`);
+
+  const { data: pages, error } = await supabase
+    .from("pages")
+    .select("page_id, page_url")
+    .is("sections_raw", null)
+    .not("screenshot_pc", "is", null)
+    .limit(BATCH_LIMIT);
+
+  if (error) {
+    console.error("[collect] ページ取得エラー:", error.message);
+    process.exit(1);
+  }
+
+  if (!pages || pages.length === 0) {
+    console.log("[collect] セクション未収集ページなし。終了します。");
+    return;
+  }
+
+  console.log(`[collect] ${pages.length}件のセクションデータを収集します`);
+
+  const browser = await chromium.launch();
+
+  for (const page of pages) {
+    console.log(`\n[collect] セクション収集: ${page.page_url}`);
+    try {
+      const context = await browser.newContext({ viewport: VIEWPORT_PC });
+      const browserPage = await context.newPage();
+      await browserPage.goto(page.page_url, {
+        waitUntil: "networkidle",
+        timeout: 30000,
+      });
+      await browserPage.waitForTimeout(1500);
+      await dismissOverlays(browserPage);
+
+      const sectionsRaw = await extractSectionData(browserPage);
+      await context.close();
+
+      if (sectionsRaw.length === 0) {
+        console.log(`[collect] セクション検出なし: ${page.page_url}`);
+        // sections_raw を空配列で保存して再処理を防ぐ
+        await supabase
+          .from("pages")
+          .update({ sections_raw: [] })
+          .eq("page_id", page.page_id);
+        continue;
+      }
+
+      const { error: updateError } = await supabase
+        .from("pages")
+        .update({ sections_raw: sectionsRaw })
+        .eq("page_id", page.page_id);
+
+      if (updateError) {
+        throw new Error(`pages更新エラー: ${updateError.message}`);
+      }
+
+      console.log(`[collect] セクション完了: ${sectionsRaw.length}個検出`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[collect] セクションエラー: ${page.page_url} - ${message}`);
+    }
+  }
+
+  await browser.close();
+  console.log("\n[collect] sections-only 全処理完了");
 }
 
 // ============================================================
