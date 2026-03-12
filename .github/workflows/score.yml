@@ -43,7 +43,7 @@ jobs:
       - name: Run score script
         env:
           SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           LIMIT=${{ github.event.inputs.limit || '80' }}
@@ -52,7 +52,7 @@ jobs:
       - name: Run tag script
         env:
           SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           LIMIT=${{ github.event.inputs.limit || '80' }}
@@ -61,8 +61,17 @@ jobs:
       - name: Run industry classification script
         env:
           SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           LIMIT=${{ github.event.inputs.limit || '80' }}
           npx tsx scripts/industry.ts --limit=$LIMIT
+
+      - name: Run embedding script
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          LIMIT=${{ github.event.inputs.limit || '80' }}
+          npx tsx scripts/embed.ts --limit=$LIMIT

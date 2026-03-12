@@ -18,7 +18,7 @@ import { chromium } from "playwright";
 // 設定
 // ============================================================
 const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY!;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY!;
 const TAVILY_API_KEY = process.env.TAVILY_API_KEY!;
 
 const args = process.argv.slice(2);
@@ -27,7 +27,7 @@ const HARVEST_LIMIT = limitArg ? parseInt(limitArg.split("=")[1]) : 50;
 const sourceArg = args.find((a) => a.startsWith("--source="));
 const SOURCE = sourceArg ? sourceArg.split("=")[1] : "all";
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // SNSドメイン（除外用）
 const SNS_DOMAINS = [
