@@ -41,6 +41,13 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
 
+      - name: Cleanup duplicates and stale queue
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
+        run: npx tsx scripts/dedup.ts
+        continue-on-error: true
+
       - name: Retry blocked sites
         env:
           SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
