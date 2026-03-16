@@ -11,7 +11,8 @@
     "collect": "dotenv -e .env.local -- tsx scripts/collect.ts",
     "score": "dotenv -e .env.local -- tsx scripts/score.ts",
     "embed": "dotenv -e .env.local -- tsx scripts/embed.ts",
-    "dedup": "dotenv -e .env.local -- tsx scripts/dedup.ts"
+    "dedup": "dotenv -e .env.local -- tsx scripts/dedup.ts",
+    "cooccurrence": "dotenv -e .env.local -- tsx scripts/cooccurrence.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

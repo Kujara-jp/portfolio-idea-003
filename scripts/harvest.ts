@@ -2,13 +2,16 @@
  * design-vault: URLハーベスタースクリプト
  * 以下の2ソースからURLを収集して collect_queue に投入する
  *   A. Awwwards ギャラリー（高品質サイト・無料）
- *   B. Tavily 検索（日本サイト補充・無料枠内）
+ *   B. CSS Design Awards ギャラリー（高品質サイト・無料）
+ *   C. Tavily 検索（日本サイト補充・無料枠内）
+ *      ※ クエリグループをローテーションして月1,000リクエスト枠内に収める
  *
  * 実行方法:
  *   npx tsx scripts/harvest.ts
  *   npx tsx scripts/harvest.ts --limit=50
  *   npx tsx scripts/harvest.ts --source=awwwards
  *   npx tsx scripts/harvest.ts --source=tavily
+ *   npx tsx scripts/harvest.ts --source=tavily --group=2   # グループ指定
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -27,6 +30,7 @@ const limitArg = args.find((a) => a.startsWith("--limit="));
 const HARVEST_LIMIT = limitArg ? parseInt(limitArg.split("=")[1]) : 50;
 const sourceArg = args.find((a) => a.startsWith("--source="));
 const SOURCE = sourceArg ? sourceArg.split("=")[1] : "all";
+const groupArg = args.find((a) => a.startsWith("--group="));
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -45,28 +49,102 @@ const SNS_DOMAINS = [
 ];
 
 // ============================================================
-// Tavily 検索キーワード（日本サイト用）
+// Tavily 検索クエリグループ（Skova Digital ターゲット業種優先）
+//
+// ローテーション戦略:
+//   グループ数: 6グループ × 各8クエリ = 計48クエリ
+//   1回の実行: 1グループ（8クエリ）のみ処理
+//   月間使用量: 8クエリ × 4回/日 × 30日 = 960リクエスト（無料枠1,000以内）
+//   全クエリ一周: 6グループ ÷ 4回/日 = 1.5日サイクル
+//
+// グループ選択:
+//   --group=N 指定時は固定
+//   未指定時は UTC エポック時間（6h単位のサイクル数）mod 6 で自動ローテーション
 // ============================================================
-const TAVILY_QUERIES = [
-  // SaaS・テック
-  "SaaS 日本 公式サイト",
-  "スタートアップ 日本 サービスサイト",
-  "クラウドサービス 日本 企業サイト",
-  "HR テック 日本",
-  // EC・ブランド
-  "ファッション ブランド 日本 公式",
-  "コスメ 日本 ブランドサイト",
-  "食品 日本 ブランド 公式",
-  "インテリア 日本 EC サイト",
-  // コーポレート
-  "デザイン会社 日本 コーポレートサイト",
-  "広告代理店 日本 会社サイト",
-  "建築設計 日本 事務所サイト",
-  "コンサルティング 日本 企業サイト",
-  // メディア・コミュニティ
-  "日本 オンラインメディア サイト",
-  "日本 クリエイター プラットフォーム",
+const TAVILY_QUERY_GROUPS: string[][] = [
+  // グループ0: 美容・サロン（Skova Digitalターゲット最優先）
+  [
+    "ヘアサロン 日本 公式サイト おしゃれ",
+    "美容室 公式ホームページ デザイン",
+    "エステサロン 日本 公式サイト",
+    "ネイルサロン 日本 ホームページ",
+    "リラクゼーション スパ 日本 公式",
+    "まつ毛エクステ 日本 サロンサイト",
+    "美容院 コーポレートサイト 日本",
+    "ヘッドスパ 美容系 日本 公式",
+  ],
+
+  // グループ1: 飲食・カフェ（Skova Digitalターゲット）
+  [
+    "カフェ 日本 公式サイト おしゃれ",
+    "レストラン 日本 コーポレートサイト",
+    "飲食店 ホームページ デザイン 日本",
+    "ラーメン店 公式サイト 日本",
+    "パン屋 ベーカリー 日本 公式",
+    "居酒屋 チェーン 日本 公式サイト",
+    "フードブランド 日本 公式ホームページ",
+    "カフェチェーン 日本 公式サイト",
+  ],
+
+  // グループ2: 不動産・建築（Skova Digitalターゲット）
+  [
+    "不動産会社 日本 コーポレートサイト",
+    "マンション 分譲 日本 公式サイト",
+    "住宅メーカー 日本 公式ホームページ",
+    "不動産エージェント 日本 企業サイト",
+    "建築事務所 日本 ポートフォリオ",
+    "リノベーション 日本 公式サイト",
+    "不動産投資 日本 企業サイト",
+    "工務店 日本 公式ホームページ",
+  ],
+
+  // グループ3: 医療・クリニック（Skova Digitalターゲット）
+  [
+    "クリニック 日本 公式サイト",
+    "歯科医院 ホームページ 日本",
+    "美容クリニック 日本 公式サイト",
+    "整体院 整骨院 日本 公式",
+    "皮膚科 クリニック 日本 ホームページ",
+    "内科 クリニック 日本 公式",
+    "病院 医療法人 日本 コーポレートサイト",
+    "ヘルスケア 日本 サービスサイト",
+  ],
+
+  // グループ4: SaaS・テック・コーポレート（既存カテゴリ継続）
+  [
+    "SaaS 日本 公式サイト",
+    "スタートアップ 日本 サービスサイト",
+    "クラウドサービス 日本 企業サイト",
+    "HR テック 日本",
+    "デザイン会社 日本 コーポレートサイト",
+    "広告代理店 日本 会社サイト",
+    "コンサルティング 日本 企業サイト",
+    "建築設計 日本 事務所サイト",
+  ],
+
+  // グループ5: EC・ブランド・その他
+  [
+    "ファッション ブランド 日本 公式",
+    "コスメ 日本 ブランドサイト",
+    "インテリア 日本 EC サイト",
+    "食品 日本 ブランド 公式",
+    "日本 オンラインメディア サイト",
+    "日本 クリエイター プラットフォーム",
+    "フィットネス ジム 日本 公式サイト",
+    "旅行 観光 日本 企業サイト",
+  ],
 ];
+
+/** Tavily クエリグループのインデックスを自動選択（UTC時間ベースのローテーション） */
+function selectQueryGroup(): number {
+  if (groupArg) {
+    const n = parseInt(groupArg.split("=")[1]);
+    if (!isNaN(n) && n >= 0 && n < TAVILY_QUERY_GROUPS.length) return n;
+  }
+  // UTC エポック秒を6時間（21,600秒）で割ったサイクル数をグループ数で割った余り
+  const cycleIndex = Math.floor(Date.now() / 1000 / 21_600);
+  return cycleIndex % TAVILY_QUERY_GROUPS.length;
+}
 
 // ============================================================
 // メイン処理
@@ -94,11 +172,12 @@ async function main() {
     console.log(`[harvest] CSSDA: ${cssdaUrls.length}件取得`);
   }
 
-  // C. Tavily 検索（日本サイト）
+  // C. Tavily 検索（日本サイト・グループローテーション）
   if (SOURCE === "all" || SOURCE === "tavily") {
-    const tavilyUrls = await harvestTavily(existingUrls);
+    const groupIndex = selectQueryGroup();
+    const tavilyUrls = await harvestTavily(existingUrls, groupIndex);
     collectedUrls.push(...tavilyUrls);
-    console.log(`[harvest] Tavily: ${tavilyUrls.length}件取得`);
+    console.log(`[harvest] Tavily: ${tavilyUrls.length}件取得（グループ${groupIndex}）`);
   }
 
   if (collectedUrls.length === 0) {
@@ -316,14 +395,23 @@ async function harvestCSSDA(
 }
 
 // ============================================================
-// C. Tavily 検索（日本サイト）
+// C. Tavily 検索（日本サイト・グループローテーション）
+//
+// groupIndex: 0〜5 のグループインデックス
+//   各グループ8クエリ × 4回/日 = 32リクエスト/日 × 30日 = 960/月（無料枠内）
 // ============================================================
 async function harvestTavily(
   existingUrls: Set<string>,
+  groupIndex: number,
 ): Promise<{ url: string; source: string; priority: number }[]> {
   const results: { url: string; source: string; priority: number }[] = [];
+  const queries = TAVILY_QUERY_GROUPS[groupIndex] ?? TAVILY_QUERY_GROUPS[0];
 
-  for (const query of TAVILY_QUERIES) {
+  console.log(
+    `[harvest] Tavily: グループ${groupIndex} (${queries.length}クエリ) を処理中...`,
+  );
+
+  for (const query of queries) {
     try {
       const res = await fetch("https://api.tavily.com/search", {
         method: "POST",
