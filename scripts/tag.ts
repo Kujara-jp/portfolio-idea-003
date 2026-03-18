@@ -425,10 +425,15 @@ ${VALID_PAGE_TYPES.filter((t) => t !== "その他・未分類").join("、")}
 
 ${pageTypeSection}
 
-## 分類ルール
+## 分類ルール（厳守事項）
 - 各軸から当てはまるタグを1〜3個選ぶ
 - 確信が持てないタグは選ばない
-- 候補にないタグは選ばない
+- **候補リストに存在するタグ名を一字一句正確にそのまま使うこと。候補にない文字列・表現・略称・類似語は絶対に使用禁止**
+- 例: 「クリーン・モダン」「モダン」「シンプル」「プロフェッショナル」「ライト背景」「ダーク背景」等の候補外の値は絶対に出力してはならない
+- 例: 「ミニマル」は候補にある。「モダン」は候補にない。必ず「ミニマル」を選ぶこと
+- 例: 「プロフェッショナル・信頼感」は候補にある。「プロフェッショナル」は候補にない。必ず「プロフェッショナル・信頼感」を選ぶこと
+- 例: 「ライト（白基調）」「ダーク（黒・深色基調）」は候補にある。「ライト背景」「ダーク背景」は候補にない。
+- 判断に迷う場合は「その他・未分類」を選ぶ（絶対に候補外の値を作らない）
 - クッキー同意バナー、ポップアップ、クーポン表示などのオーバーレイ要素は無視して、背後のメインコンテンツのデザインを評価すること
 - オーバーレイが大きくメインコンテンツが見えない場合はその旨を判断の根拠にしないこと
 
@@ -480,8 +485,16 @@ function parseTagResponse(text: string): TagResult {
 
   const parsed = JSON.parse(match[0]);
 
-  const toArray = (v: unknown): string[] =>
-    Array.isArray(v) ? v.filter((s) => typeof s === "string") : [];
+  // 定義済みタグリストに含まれる値のみを返す（定義外タグを除外）
+  const toValidArray = (v: unknown, validTags: string[]): string[] => {
+    if (!Array.isArray(v)) return [];
+    const filtered = v.filter((s) => typeof s === "string" && validTags.includes(s));
+    const invalid = v.filter((s) => typeof s === "string" && !validTags.includes(s));
+    if (invalid.length > 0) {
+      console.warn(`[tag] 定義外タグを除外しました: ${invalid.join(", ")}`);
+    }
+    return filtered;
+  };
 
   // page_type のバリデーション: 有効値リストに含まれる場合のみ採用
   let pageType: string | null = null;
@@ -490,13 +503,13 @@ function parseTagResponse(text: string): TagResult {
   }
 
   return {
-    design_tone: toArray(parsed.design_tone),
-    color_scheme: toArray(parsed.color_scheme),
-    layout_pattern: toArray(parsed.layout_pattern),
-    typography: toArray(parsed.typography),
-    navigation: toArray(parsed.navigation),
-    conversion: toArray(parsed.conversion),
-    visual_material: toArray(parsed.visual_material),
+    design_tone: toValidArray(parsed.design_tone, TAG_DEFINITIONS.design_tone),
+    color_scheme: toValidArray(parsed.color_scheme, TAG_DEFINITIONS.color_scheme),
+    layout_pattern: toValidArray(parsed.layout_pattern, TAG_DEFINITIONS.layout_pattern),
+    typography: toValidArray(parsed.typography, TAG_DEFINITIONS.typography),
+    navigation: toValidArray(parsed.navigation, TAG_DEFINITIONS.navigation),
+    conversion: toValidArray(parsed.conversion, TAG_DEFINITIONS.conversion),
+    visual_material: toValidArray(parsed.visual_material, TAG_DEFINITIONS.visual_material),
     page_type: pageType,
   };
 }
