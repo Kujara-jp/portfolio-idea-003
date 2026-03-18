@@ -21,7 +21,7 @@
  *   SUPABASE_SERVICE_ROLE_KEY  サービスロールキー
  */
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { writeFileSync } from "fs";
 
 // ============================================================
@@ -153,7 +153,8 @@ async function main() {
 // Embedding 付きページを取得
 // ============================================================
 async function fetchPagesWithEmbedding(
-  supabase: ReturnType<typeof createClient>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
 ): Promise<PageRow[]> {
   const PAGE_SIZE = 500;
   const allPages: PageRow[] = [];
@@ -302,7 +303,8 @@ function printDuplicates(duplicates: DuplicatePair[]) {
 // 削除実行（--execute モードのみ）
 // ============================================================
 async function executeDeletion(
-  supabase: ReturnType<typeof createClient>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
   duplicates: DuplicatePair[],
 ) {
   // recommendation が "delete_b" のペアのみ自動削除

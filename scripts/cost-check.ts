@@ -15,7 +15,7 @@
  *   SUPABASE_SERVICE_ROLE_KEY  サービスロールキー
  */
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { writeFileSync } from "fs";
 
 // ============================================================
@@ -128,7 +128,8 @@ async function main() {
 // データ統計取得
 // ============================================================
 async function fetchDataStats(
-  supabase: ReturnType<typeof createClient>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
 ): Promise<DataStats> {
   // サイト総数・ブロック数
   const { count: totalSites } = await supabase

@@ -15,7 +15,7 @@
  *   SUPABASE_SERVICE_ROLE_KEY  サービスロールキー（全テーブル読み取り権限）
  */
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 
@@ -117,7 +117,8 @@ async function main() {
 // テーブル全件エクスポート（ページネーション対応）
 // ============================================================
 async function exportTable(
-  supabase: ReturnType<typeof createClient>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
   table: string,
   outputDir: string,
   dateStr: string,

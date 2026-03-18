@@ -370,16 +370,18 @@ function parseSectionResponse(text: string): SectionResult[] {
 
   const validTypes = new Set<string>(SECTION_TYPES);
 
-  return parsed
+  return (parsed as unknown[])
     .filter(
-      (s: any) =>
-        typeof s.section_order === "number" &&
-        typeof s.section_type === "string" &&
-        validTypes.has(s.section_type),
+      (s): s is Record<string, unknown> =>
+        typeof s === "object" &&
+        s !== null &&
+        typeof (s as Record<string, unknown>).section_order === "number" &&
+        typeof (s as Record<string, unknown>).section_type === "string" &&
+        validTypes.has((s as Record<string, unknown>).section_type as string),
     )
-    .map((s: any) => ({
-      section_order: s.section_order,
-      section_type: s.section_type,
+    .map((s) => ({
+      section_order: s.section_order as number,
+      section_type: s.section_type as string,
       section_label:
         typeof s.section_label === "string" ? s.section_label : null,
       heading_text:
