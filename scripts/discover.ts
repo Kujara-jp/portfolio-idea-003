@@ -321,6 +321,7 @@ async function crawlHomepageLinks(
 ): Promise<string[]> {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 800 },
+    reducedMotion: "reduce",
   });
 
   try {

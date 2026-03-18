@@ -440,7 +440,10 @@ async function takeScreenshots(
   browser: Browser,
   url: string,
 ): Promise<{ screenshotPc: Buffer; screenshotSp: Buffer; seoData: SeoData; sectionsRaw: SectionRaw[] }> {
-  const pcContext = await browser.newContext({ viewport: VIEWPORT_PC });
+  const pcContext = await browser.newContext({
+    viewport: VIEWPORT_PC,
+    reducedMotion: "reduce",
+  });
   const pcPage = await pcContext.newPage();
   await pcPage.goto(url, { waitUntil: "networkidle", timeout: 30000 });
   await pcPage.waitForTimeout(1500);
@@ -461,7 +464,10 @@ async function takeScreenshots(
   const screenshotPc = await pcPage.screenshot({ fullPage: false });
   await pcContext.close();
 
-  const spContext = await browser.newContext({ viewport: VIEWPORT_SP });
+  const spContext = await browser.newContext({
+    viewport: VIEWPORT_SP,
+    reducedMotion: "reduce",
+  });
   const spPage = await spContext.newPage();
   await spPage.goto(url, { waitUntil: "networkidle", timeout: 30000 });
   await spPage.waitForTimeout(1500);
