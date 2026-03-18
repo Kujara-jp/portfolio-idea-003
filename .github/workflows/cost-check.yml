@@ -1,0 +1,48 @@
+name: design-vault cost check
+
+on:
+  # 毎月1日 JST 9:00（UTC 0:00）に自動実行
+  schedule:
+    - cron: "0 0 1 * *"
+
+  # 手動実行
+  workflow_dispatch:
+    inputs:
+      budget:
+        description: "月予算 USD（デフォルト: 55）"
+        required: false
+        default: "55"
+
+concurrency:
+  group: cost-check
+  cancel-in-progress: false
+
+jobs:
+  cost-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run cost check script
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          BUDGET="${{ github.event.inputs.budget || '55' }}"
+          npx tsx scripts/cost-check.ts --budget=$BUDGET
+
+      # cost-check.ts が exit code 1 を返した場合（予算超過）はここで止まる。
+      # GitHub Actions の通知設定によって、リポジトリ管理者にメール通知が届く。
+      # 通知設定: GitHub Settings > Notifications > "Failed workflows only"
