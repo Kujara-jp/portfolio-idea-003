@@ -1,0 +1,53 @@
+name: design-vault backup
+
+on:
+  # 毎週月曜 JST 3:00（UTC 日曜 18:00）に自動実行
+  schedule:
+    - cron: "0 18 * * 0"
+
+  # 手動実行
+  workflow_dispatch:
+    inputs:
+      tables:
+        description: "バックアップ対象テーブル（カンマ区切り）"
+        required: false
+        default: "sites,pages,page_sections"
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run backup script
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          TABLES="${{ github.event.inputs.tables || 'sites,pages,page_sections' }}"
+          npx tsx scripts/backup.ts --tables=$TABLES --output=./backup
+
+      - name: Upload backup as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-backup-${{ github.run_id }}
+          path: ./backup/
+          # 30日間保持（無料枠内: GitHub Actionsアーティファクトは500MB/月まで無料）
+          retention-days: 30
+          if-no-files-found: error
