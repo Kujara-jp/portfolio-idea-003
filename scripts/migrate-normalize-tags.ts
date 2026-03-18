@@ -42,6 +42,8 @@ const NORMALIZATION_RULES: {
   { field: "design_tone", old: "クリエイティブ", new: "アーティスティック・実験的" },
   { field: "design_tone", old: "ダーク・エッジー", new: "ゴシック・ダーク・オルタナティブ" },
   { field: "design_tone", old: "クリーン・モダン", new: "ミニマル" },
+  { field: "design_tone", old: "モダン", new: "ミニマル" },
+  { field: "design_tone", old: "シンプル", new: "ミニマル" },
   { field: "design_tone", old: "ウォーム・カジュアル", new: "ウォーム・アットホーム" },
 
   // ④ color_scheme
