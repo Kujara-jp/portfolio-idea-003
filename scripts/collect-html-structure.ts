@@ -281,34 +281,25 @@ async function main(): Promise<void> {
   );
 
   // html_clean が未収集の page_sections を持つページを取得
-  // page_sections の中に html_clean IS NULL のものがあるページが対象
-  let query = supabase
-    .from("pages")
-    .select(
-      `page_id, page_url, design_rules,
-       page_sections!inner(section_id, section_type, position)`,
-    )
-    .is("page_sections.html_clean", null)
-    .neq("is_blocked", true)
-    .not("page_url", "is", null);
+  // 業種フィルタの有無で SELECT が変わるため any 型で統一する
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query: any;
 
-  // 業種フィルタ: sites テーブルの industry カラムで絞り込む
-  // まず対象ページIDを業種で絞り込んでから取得
-  let targetPageIds: string[] | null = null;
   if (INDUSTRY_FILTER) {
+    // 業種フィルタあり: まず対象ページIDを取得してから IN で絞り込む
     const { data: industryPages, error: industryError } = await supabase
       .from("pages")
-      .select("page_id, sites!inner(quality_score, industry)")
+      .select("page_id, sites!inner(quality_score, industry_category)")
       .gte("sites.quality_score", MIN_QUALITY)
-      .eq("sites.industry", INDUSTRY_FILTER)
+      .eq("sites.industry_category", INDUSTRY_FILTER)
       .neq("is_blocked", true)
-      .limit(BATCH_LIMIT * 3); // 余裕を持って取得
+      .limit(BATCH_LIMIT * 3);
 
     if (industryError) {
       console.error("[collect-html-structure] 業種フィルタエラー:", industryError.message);
       process.exit(1);
     }
-    targetPageIds = (industryPages ?? []).map((p) => p.page_id);
+    const targetPageIds = (industryPages ?? []).map((p: { page_id: string }) => p.page_id);
     if (targetPageIds.length === 0) {
       console.log(
         `[collect-html-structure] 業種「${INDUSTRY_FILTER}」のページが見つかりません。`,
@@ -318,10 +309,6 @@ async function main(): Promise<void> {
     console.log(
       `[collect-html-structure] 業種「${INDUSTRY_FILTER}」: ${targetPageIds.length} ページ候補`,
     );
-    // 対象IDで絞り込む
-    query = query.in("page_id", targetPageIds.slice(0, BATCH_LIMIT * 2));
-  } else {
-    // 業種フィルタなしの場合は quality_score で絞り込む
     query = supabase
       .from("pages")
       .select(
@@ -330,11 +317,24 @@ async function main(): Promise<void> {
       )
       .is("page_sections.html_clean", null)
       .neq("is_blocked", true)
+      .not("page_url", "is", null)
+      .in("page_id", targetPageIds.slice(0, BATCH_LIMIT * 2));
+  } else {
+    // 業種フィルタなし: sites!inner で quality_score を絞り込む
+    query = supabase
+      .from("pages")
+      .select(
+        `page_id, page_url, design_rules,
+         page_sections!inner(section_id, section_type, position),
+         sites!inner(quality_score)`,
+      )
+      .is("page_sections.html_clean", null)
+      .neq("is_blocked", true)
       .gte("sites.quality_score", MIN_QUALITY)
       .not("page_url", "is", null);
   }
 
-  const { data: pages, error } = await (query as ReturnType<typeof query["order"]>)
+  const { data: pages, error } = await query
     .order("created_at", { ascending: false })
     .limit(BATCH_LIMIT);
 
