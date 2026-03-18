@@ -309,6 +309,8 @@ async function main(): Promise<void> {
     console.log(
       `[collect-html-structure] 業種「${INDUSTRY_FILTER}」: ${targetPageIds.length} ページ候補`,
     );
+    // IN句の上限を100件に固定してリクエストサイズ超過を防ぐ
+    const IN_CLAUSE_LIMIT = 100;
     query = supabase
       .from("pages")
       .select(
@@ -318,7 +320,7 @@ async function main(): Promise<void> {
       .is("page_sections.html_clean", null)
       .neq("is_blocked", true)
       .not("page_url", "is", null)
-      .in("page_id", targetPageIds.slice(0, BATCH_LIMIT * 2));
+      .in("page_id", targetPageIds.slice(0, IN_CLAUSE_LIMIT));
   } else {
     // 業種フィルタなし: sites!inner で quality_score を絞り込む
     query = supabase
