@@ -1,0 +1,67 @@
+name: design-vault dedup embedding
+
+on:
+  # 手動実行のみ（自動削除は安全上の理由から手動確認後に実行）
+  workflow_dispatch:
+    inputs:
+      threshold:
+        description: "類似度しきい値（デフォルト: 0.98、高いほど厳格）"
+        required: false
+        default: "0.98"
+      mode:
+        description: "実行モード（dry-run: レポートのみ / execute: 削除実行）"
+        required: false
+        default: "dry-run"
+        type: choice
+        options:
+          - dry-run
+          - execute
+      limit:
+        description: "検査ページ数の上限（デフォルト: 2000）"
+        required: false
+        default: "2000"
+
+concurrency:
+  group: dedup-embedding
+  cancel-in-progress: false
+
+jobs:
+  dedup-embedding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run embedding dedup script
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          THRESHOLD="${{ github.event.inputs.threshold || '0.98' }}"
+          MODE="${{ github.event.inputs.mode || 'dry-run' }}"
+          LIMIT="${{ github.event.inputs.limit || '2000' }}"
+
+          if [ "$MODE" = "execute" ]; then
+            npx tsx scripts/dedup-embedding.ts --execute --threshold=$THRESHOLD --limit=$LIMIT --output=./dedup_report.json
+          else
+            npx tsx scripts/dedup-embedding.ts --dry-run --threshold=$THRESHOLD --limit=$LIMIT --output=./dedup_report.json
+          fi
+
+      - name: Upload dedup report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dedup-embedding-report-${{ github.run_id }}
+          path: ./dedup_report.json
+          retention-days: 7
+          if-no-files-found: warn
