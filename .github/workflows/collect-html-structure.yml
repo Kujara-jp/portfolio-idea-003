@@ -23,7 +23,9 @@ on:
         default: ""
 
 concurrency:
-  group: collect-html-structure
+  # 業種別に独立したグループにして並列実行可能にする
+  # 同一業種の重複実行のみ防止する
+  group: collect-html-structure-${{ github.event.inputs.industry || 'all' }}
   cancel-in-progress: false
 
 jobs:
