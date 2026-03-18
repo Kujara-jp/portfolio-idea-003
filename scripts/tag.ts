@@ -239,7 +239,7 @@ async function main() {
       const prompt = buildTaggingPrompt(page.page_type, page.page_url ?? "");
 
       requests.push({
-        model: "claude-haiku-4-5-20251001",
+        model: "claude-haiku-4-5",
         max_tokens: 1024,
         messages: [
           {

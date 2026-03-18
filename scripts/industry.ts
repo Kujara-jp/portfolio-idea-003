@@ -136,7 +136,7 @@ async function main() {
       const imageBase64 = await fetchImageAsBase64(page.screenshot_pc);
 
       requests.push({
-        model: "claude-haiku-4-5-20251001",
+        model: "claude-haiku-4-5",
         max_tokens: 512,
         messages: [
           {
