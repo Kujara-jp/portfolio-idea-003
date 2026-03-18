@@ -75,6 +75,8 @@ interface DesignRules {
 interface PageRecord {
   page_id: string;
   page_url: string;
+  // sites!inner join によりネストされて返るが、フィルタ用途のみのため使用しない
+  sites?: unknown;
 }
 
 // ============================================================
@@ -268,14 +270,16 @@ async function main(): Promise<void> {
   // 対象ページを取得:
   //   - design_rules IS NULL（未収集）
   //   - is_blocked IS NOT TRUE
-  //   - quality_score >= 3（低品質ページを除外）
+  //   - 親サイトの quality_score >= 3（低品質ページを除外。quality_scoreはsitesテーブルのカラム）
   //   - page_url IS NOT NULL
+  // 注: quality_score は pages テーブルではなく sites テーブルのカラムのため、
+  //     Supabase の embedded resource filter（sites!inner）でフィルタする。
   const { data: pages, error } = await supabase
     .from("pages")
-    .select("page_id, page_url")
+    .select("page_id, page_url, sites!inner(quality_score)")
     .is("design_rules", null)
     .neq("is_blocked", true)
-    .gte("quality_score", 3)
+    .gte("sites.quality_score", 3)
     .not("page_url", "is", null)
     .order("created_at", { ascending: false })
     .limit(BATCH_LIMIT);
