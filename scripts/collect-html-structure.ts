@@ -77,7 +77,7 @@ interface ComputedStyles {
 interface SectionRecord {
   section_id: string;
   section_type: string;
-  position: number;
+  section_order: number;
 }
 
 interface PageWithSections {
@@ -313,7 +313,7 @@ async function main(): Promise<void> {
       .from("pages")
       .select(
         `page_id, page_url, design_rules,
-         page_sections!inner(section_id, section_type, position)`,
+         page_sections!inner(section_id, section_type, section_order)`,
       )
       .is("page_sections.html_clean", null)
       .neq("is_blocked", true)
@@ -325,7 +325,7 @@ async function main(): Promise<void> {
       .from("pages")
       .select(
         `page_id, page_url, design_rules,
-         page_sections!inner(section_id, section_type, position),
+         page_sections!inner(section_id, section_type, section_order),
          sites!inner(quality_score)`,
       )
       .is("page_sections.html_clean", null)
