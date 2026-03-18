@@ -1,0 +1,50 @@
+name: migrate - normalize tag values
+
+on:
+  # 手動実行のみ（本番DBへの変更のため自動実行禁止）
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "DRY RUN（実際にはDB変更しない）"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run migration (DRY RUN)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          echo "=== DRY RUN モード ==="
+          npx tsx scripts/migrate-normalize-tags.ts --dry-run
+
+      - name: Run migration (EXECUTE)
+        if: ${{ github.event.inputs.dry_run == 'false' }}
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          echo "=== 実行モード: DBを更新します ==="
+          npx tsx scripts/migrate-normalize-tags.ts
