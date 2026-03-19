@@ -349,10 +349,43 @@ async function main() {
       .eq("queue_id", item.queue_id);
 
     try {
-      const { screenshotPc, screenshotSp, seoData, sectionsRaw } = await takeScreenshots(
+      const { screenshotPc, screenshotSp, seoData, sectionsRaw, httpStatusCode } = await takeScreenshots(
         browser,
         item.url,
       );
+
+      // 404/410/451 は即時ブロック。スクリーンショット保存・採点をスキップする
+      if (BLOCK_ON_STATUS_CODES.includes(httpStatusCode)) {
+        console.log(`[collect] ⛔ ブロック (HTTP ${httpStatusCode}): ${item.url}`);
+
+        // collect_queue を failed + ステータスコード記録で完了
+        await supabase
+          .from("collect_queue")
+          .update({
+            status: "failed",
+            http_status_code: httpStatusCode,
+            completed_at: new Date().toISOString(),
+          })
+          .eq("queue_id", item.queue_id);
+
+        // サブページキューの場合: site_id が既知なので sites と pages を即ブロック
+        if (item.site_id) {
+          await supabase
+            .from("sites")
+            .update({ is_blocked: true })
+            .eq("site_id", item.site_id);
+
+          // pages テーブルに既にレコードがある場合のみ更新（upsert前なので通常は存在しないが念のため）
+          const canonicalUrl = canonicalizeUrl(item.url);
+          await supabase
+            .from("pages")
+            .update({ is_blocked: true })
+            .eq("site_id", item.site_id)
+            .eq("page_url", canonicalUrl);
+        }
+
+        continue;
+      }
 
       const siteKey = urlToKey(item.url);
       const pcPath = `${siteKey}/pc.png`;
@@ -436,16 +469,31 @@ async function main() {
 // ============================================================
 // スクリーンショット撮影
 // ============================================================
+// 即時ブロック対象とするHTTPステータスコード（コンテンツが存在しない・法的アクセス不可）
+// 403/5xx はスクリーンショットを撮影し score.ts のビジョン検出に委ねる
+// 404: Not Found（ページ削除・URL変更）
+// 410: Gone（意図的な削除）
+// 451: Unavailable For Legal Reasons（法的理由によるアクセス不可）
+const BLOCK_ON_STATUS_CODES: ReadonlyArray<number> = [404, 410, 451];
+
 async function takeScreenshots(
   browser: Browser,
   url: string,
-): Promise<{ screenshotPc: Buffer; screenshotSp: Buffer; seoData: SeoData; sectionsRaw: SectionRaw[] }> {
+): Promise<{ screenshotPc: Buffer; screenshotSp: Buffer; seoData: SeoData; sectionsRaw: SectionRaw[]; httpStatusCode: number }> {
   const pcContext = await browser.newContext({
     viewport: VIEWPORT_PC,
     reducedMotion: "reduce",
   });
   const pcPage = await pcContext.newPage();
-  await pcPage.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+
+  // PCページのナビゲーションレスポンスを取得してHTTPステータスコードを記録する
+  const pcResponse = await pcPage.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+  const httpStatusCode = pcResponse ? pcResponse.status() : 0;
+
+  if (httpStatusCode > 0) {
+    console.log(`[collect]   HTTP status: ${httpStatusCode}`);
+  }
+
   await pcPage.waitForTimeout(1500);
   await dismissOverlays(pcPage);
 
@@ -475,7 +523,7 @@ async function takeScreenshots(
   const screenshotSp = await spPage.screenshot({ fullPage: false });
   await spContext.close();
 
-  return { screenshotPc, screenshotSp, seoData, sectionsRaw };
+  return { screenshotPc, screenshotSp, seoData, sectionsRaw, httpStatusCode };
 }
 
 // ============================================================
