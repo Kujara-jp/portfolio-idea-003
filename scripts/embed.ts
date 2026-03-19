@@ -52,7 +52,9 @@ interface PageData {
   sites: {
     quality_score: number | null;
     industry_category: string | null;
+    industry_tags: string[] | null; // 業態サブタグ（個人・中小規模 vs 大手の区別に使用）
   };
+  page_sections: { section_type: string; section_order: number }[] | null;
 }
 
 // ============================================================
@@ -61,10 +63,25 @@ interface PageData {
 function buildEmbeddingText(page: PageData): string {
   const lines: string[] = [];
 
+  // 業種情報（親カテゴリ + 業態サブタグ）
   const industry = page.sites?.industry_category;
   if (industry) lines.push(`業種: ${industry}`);
 
+  // 業態サブタグ（個人カフェ・ヘアサロン等 vs チェーン・大手を区別するキーシグナル）
+  const industryTags = page.sites?.industry_tags;
+  if (industryTags && industryTags.length > 0)
+    lines.push(`業態: ${industryTags.join(", ")}`);
+
   if (page.page_type) lines.push(`ページ種別: ${page.page_type}`);
+
+  // セクション構成（出現順に並べてページ構造を表現）
+  if (page.page_sections && page.page_sections.length > 0) {
+    const sectionFlow = page.page_sections
+      .sort((a, b) => a.section_order - b.section_order)
+      .map((s) => s.section_type)
+      .join(" → ");
+    lines.push(`セクション構成: ${sectionFlow}`);
+  }
 
   const arrayField = (label: string, arr: string[] | null) => {
     if (arr && arr.length > 0) lines.push(`${label}: ${arr.join(", ")}`);
@@ -144,7 +161,8 @@ async function main() {
       typography_tags, navigation_tags, conversion_tags, visual_material,
       responsive_score,
       seo_page_title, seo_meta_description, seo_h1_text, seo_catchcopy_text,
-      sites (quality_score, industry_category)
+      sites (quality_score, industry_category, industry_tags),
+      page_sections (section_type, section_order)
     `,
     )
     .not("screenshot_pc", "is", null)
