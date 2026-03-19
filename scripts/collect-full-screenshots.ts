@@ -250,13 +250,14 @@ async function dismissOverlays(page: import("playwright").Page): Promise<void> {
 async function main() {
   console.log(`[full-ss] 開始 (最大${BATCH_LIMIT}件, min_quality=${MIN_QUALITY})`);
 
-  // 未収集ページを取得（品質スコアの高い順）
+  // 未収集ページを取得（quality_score は sites テーブル側にある）
   let query = supabase
     .from("pages")
-    .select("page_id, page_url, quality_score")
+    .select("page_id, page_url, sites!inner(quality_score)")
     .eq("is_blocked", false)
-    .gte("quality_score", MIN_QUALITY)
-    .order("quality_score", { ascending: false })
+    .not("sites.quality_score", "is", null)
+    .gte("sites.quality_score", MIN_QUALITY)
+    .order("sites(quality_score)", { ascending: false })
     .limit(BATCH_LIMIT);
 
   if (!FORCE_RECOLLECT) {
@@ -281,7 +282,9 @@ async function main() {
   let errorCount = 0;
 
   for (const dbPage of pages) {
-    console.log(`\n[full-ss] 処理中: ${dbPage.page_url} (quality=${dbPage.quality_score})`);
+    const siteInfo = (dbPage as Record<string, unknown>).sites as Record<string, unknown> | null;
+    const qualityScore = Array.isArray(siteInfo) ? (siteInfo[0]?.quality_score ?? null) : (siteInfo?.quality_score ?? null);
+    console.log(`\n[full-ss] 処理中: ${dbPage.page_url} (quality=${qualityScore})`);
 
     try {
       const segments = await captureSegments(dbPage.page_url);
