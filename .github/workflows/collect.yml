@@ -86,3 +86,10 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
         run: npx tsx scripts/collect.ts --sections-only --limit=50
         continue-on-error: true
+
+      - name: Collect full-page screenshots (Phase 12b)
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
+        run: npx tsx scripts/collect-full-screenshots.ts --limit=20 --min-quality=3
+        continue-on-error: true
