@@ -43,8 +43,10 @@ const groupArg = args.find((a) => a.startsWith("--group="));
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// SNSドメイン（除外用）
+// 除外ドメイン（SNS・ポータル・大手プラットフォーム）
+// ギャラリースクレイピング時のリンクフィルタ + Tavily除外に使用
 const SNS_DOMAINS = [
+  // SNS
   "facebook.com",
   "instagram.com",
   "twitter.com",
@@ -55,6 +57,54 @@ const SNS_DOMAINS = [
   "pinterest.com",
   "behance.net",
   "dribbble.com",
+  // グルメ・予約ポータル（事業者サイトではないため除外）
+  "tabelog.com",
+  "hotpepper.jp",
+  "jalan.net",
+  "travel.rakuten.co.jp",
+  "ikyu.com",
+  "yelp.com",
+  "tripadvisor.com",
+  "tripadvisor.jp",
+  "retty.me",
+  "gurunavi.com",
+  // 大手ECプラットフォーム
+  "amazon.co.jp",
+  "amazon.com",
+  "rakuten.co.jp",
+  "mercari.com",
+  "yahoo.co.jp",
+  "shopping.yahoo.co.jp",
+  // ニュース・メディア・ポータル
+  "wikipedia.org",
+  "news.yahoo.co.jp",
+  "mynavi.jp",
+  "type.jp",
+  "doda.jp",
+  "recruit.co.jp",
+  // 地図・検索
+  "maps.google.com",
+  "google.com",
+  "apple.com",
+  // クラウドソーシング・フリマ
+  "lancers.jp",
+  "crowdworks.jp",
+  "coconala.com",
+  // 予約・集客プラットフォーム
+  "minpaku.com",
+  "airbnb.com",
+  "booking.com",
+  "hotels.com",
+  "beauty.hotpepper.jp",
+  "eparkbeauty.com",
+  "b-post.jp",
+  // ブログ・CMS（純粋な事業者サイトではないため）
+  "ameblo.jp",
+  "note.com",
+  "wix.com",
+  "jimdo.com",
+  "stores.jp",
+  "base.shop",
 ];
 
 // ============================================================
@@ -468,16 +518,8 @@ async function harvestTavily(
           search_depth: "basic",
           max_results: 10,
           include_domains: [],
-          exclude_domains: [
-            "wikipedia.org",
-            "youtube.com",
-            "twitter.com",
-            "facebook.com",
-            "instagram.com",
-            "linkedin.com",
-            "amazon.co.jp",
-            "rakuten.co.jp",
-          ],
+          // SNS_DOMAINS と同期（ポータル・大手プラットフォームを包括除外）
+          exclude_domains: SNS_DOMAINS,
         }),
       });
 
