@@ -1,10 +1,14 @@
 /**
  * design-vault: URLハーベスタースクリプト
- * 以下の2ソースからURLを収集して collect_queue に投入する
+ * 以下のソースからURLを収集して collect_queue に投入する
  *   A. Awwwards ギャラリー（高品質サイト・無料）
  *   B. CSS Design Awards ギャラリー（高品質サイト・無料）
  *   C. Tavily 検索（日本サイト補充・無料枠内）
  *      ※ クエリグループをローテーションして月1,000リクエスト枠内に収める
+ *   D. WebDesignClip（国内ギャラリー・Skova優先業種カテゴリ）
+ *   E. I/O 3000（国内ギャラリー・全件ページネーション）
+ *   F. MUUUUU.ORG（国内ギャラリー・全件ページネーション）
+ *   G. SANKOU!（国内ギャラリー・Skova優先業種カテゴリ）
  *
  * 実行方法:
  *   npx tsx scripts/harvest.ts
@@ -12,6 +16,11 @@
  *   npx tsx scripts/harvest.ts --source=awwwards
  *   npx tsx scripts/harvest.ts --source=tavily
  *   npx tsx scripts/harvest.ts --source=tavily --group=2   # グループ指定
+ *   npx tsx scripts/harvest.ts --source=webdesignclip
+ *   npx tsx scripts/harvest.ts --source=io3000
+ *   npx tsx scripts/harvest.ts --source=muuuuu
+ *   npx tsx scripts/harvest.ts --source=sankou
+ *   npx tsx scripts/harvest.ts --source=jp-galleries    # 国内4ギャラリー一括
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -191,6 +200,34 @@ async function main() {
     console.log(`[harvest] Tavily: ${tavilyUrls.length}件取得（グループ${groupIndex}）`);
   }
 
+  // D. WebDesignClip（国内ギャラリー・Skova優先業種カテゴリ）
+  if (SOURCE === "all" || SOURCE === "jp-galleries" || SOURCE === "webdesignclip") {
+    const wdcUrls = await harvestWebDesignClip(existingUrls);
+    collectedUrls.push(...wdcUrls);
+    console.log(`[harvest] WebDesignClip: ${wdcUrls.length}件取得`);
+  }
+
+  // E. I/O 3000（国内ギャラリー・全件ページネーション）
+  if (SOURCE === "all" || SOURCE === "jp-galleries" || SOURCE === "io3000") {
+    const io3000Urls = await harvestIo3000(existingUrls);
+    collectedUrls.push(...io3000Urls);
+    console.log(`[harvest] I/O 3000: ${io3000Urls.length}件取得`);
+  }
+
+  // F. MUUUUU.ORG（国内ギャラリー・全件ページネーション）
+  if (SOURCE === "all" || SOURCE === "jp-galleries" || SOURCE === "muuuuu") {
+    const muuuuuUrls = await harvestMuuuuu(existingUrls);
+    collectedUrls.push(...muuuuuUrls);
+    console.log(`[harvest] MUUUUU.ORG: ${muuuuuUrls.length}件取得`);
+  }
+
+  // G. SANKOU!（国内ギャラリー・Skova優先業種カテゴリ）
+  if (SOURCE === "all" || SOURCE === "jp-galleries" || SOURCE === "sankou") {
+    const sankouUrls = await harvestSankou(existingUrls);
+    collectedUrls.push(...sankouUrls);
+    console.log(`[harvest] SANKOU!: ${sankouUrls.length}件取得`);
+  }
+
   if (collectedUrls.length === 0) {
     console.log("[harvest] 新規URLなし。終了します。");
     return;
@@ -216,15 +253,13 @@ async function main() {
   }
 
   console.log(`\n[harvest] ✅ ${toInsert.length}件投入完了`);
-  console.log(
-    `[harvest]   Awwwards: ${toInsert.filter((u) => u.source === "awwwards").length}件`,
-  );
-  console.log(
-    `[harvest]   CSSDA:    ${toInsert.filter((u) => u.source === "cssda").length}件`,
-  );
-  console.log(
-    `[harvest]   Tavily:   ${toInsert.filter((u) => u.source === "tavily").length}件`,
-  );
+  const summarySources = ["awwwards", "cssda", "tavily", "webdesignclip", "io3000", "muuuuu", "sankou"];
+  for (const src of summarySources) {
+    const count = toInsert.filter((u) => u.source === src).length;
+    if (count > 0) {
+      console.log(`[harvest]   ${src.padEnd(14)}: ${count}件`);
+    }
+  }
 }
 
 // ============================================================
@@ -470,6 +505,387 @@ async function harvestTavily(
     } catch (err) {
       console.warn(`[harvest] Tavily "${query}" エラー:`, err);
     }
+  }
+
+  return results;
+}
+
+// ============================================================
+// D. WebDesignClip（国内デザインギャラリー）
+//    Skova Digitalターゲット業種に対応するカテゴリページを巡回し
+//    aria-label="launch" リンクから元サイトURLを取得する
+// ============================================================
+
+/** WebDesignClip の対象カテゴリ（Skova Digitalターゲット業種対応） */
+const WDC_CATEGORIES = [
+  "beauty",        // 美容・ヘアサロン
+  "eat-drink",     // 飲食・カフェ・バー
+  "food",          // 食品・フード
+  "hospital",      // 医療・クリニック
+  "estate",        // 不動産・建築
+  "company",       // 企業・コーポレート（中小）
+  "sports",        // スポーツ・フィットネス
+  "welfare",       // 福祉・介護
+  "school",        // 教育・スクール
+];
+
+async function harvestWebDesignClip(
+  existingUrls: Set<string>,
+): Promise<{ url: string; source: string; priority: number }[]> {
+  const results: { url: string; source: string; priority: number }[] = [];
+
+  const browser = await chromium.launch({ args: ["--no-sandbox"] });
+  try {
+    const context = await browser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    });
+    const page = await context.newPage();
+
+    for (const category of WDC_CATEGORIES) {
+      // 各カテゴリの1〜3ページを巡回
+      for (let pageNum = 1; pageNum <= 3; pageNum++) {
+        const url =
+          pageNum === 1
+            ? `https://webdesignclip.com/category/${category}/`
+            : `https://webdesignclip.com/category/${category}/page/${pageNum}/`;
+
+        try {
+          const res = await page.goto(url, {
+            waitUntil: "domcontentloaded",
+            timeout: 20000,
+          });
+
+          // 404 等でページが存在しない場合はスキップ
+          if (!res || res.status() === 404) break;
+
+          // aria-label="launch" のリンクを取得
+          const siteUrls = await page.evaluate((snsDomains: string[]) => {
+            return Array.from(
+              document.querySelectorAll<HTMLAnchorElement>('a[aria-label="launch"]'),
+            )
+              .map((a) => a.href)
+              .filter(
+                (h) =>
+                  h.startsWith("http") &&
+                  !h.includes("webdesignclip.com") &&
+                  !snsDomains.some((sns) => h.includes(sns)),
+              );
+          }, SNS_DOMAINS);
+
+          for (const siteUrl of siteUrls) {
+            try {
+              const parsed = new URL(siteUrl);
+              const normalized = `${parsed.protocol}//${parsed.hostname}`;
+              if (!existingUrls.has(normalizeForDedup(normalized))) {
+                existingUrls.add(normalizeForDedup(normalized));
+                results.push({ url: normalized, source: "webdesignclip", priority: 1 });
+              }
+            } catch {
+              // URL パース失敗は無視
+            }
+          }
+
+          console.log(
+            `[harvest] WebDesignClip /${category}/ page${pageNum}: ${siteUrls.length}件`,
+          );
+          await sleep(1500);
+        } catch (err) {
+          console.warn(`[harvest] WebDesignClip ${url} エラー:`, err);
+          break;
+        }
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return results;
+}
+
+// ============================================================
+// E. I/O 3000（国内デザインギャラリー）
+//    トップページ + ページネーション（/?page=N）から
+//    class="list-index__target" のリンクで元サイトURLを取得する
+// ============================================================
+
+async function harvestIo3000(
+  existingUrls: Set<string>,
+): Promise<{ url: string; source: string; priority: number }[]> {
+  const results: { url: string; source: string; priority: number }[] = [];
+
+  const browser = await chromium.launch({ args: ["--no-sandbox"] });
+  try {
+    const context = await browser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    });
+    const page = await context.newPage();
+
+    // 最大5ページまで巡回（1ページあたり約12件）
+    for (let pageNum = 1; pageNum <= 5; pageNum++) {
+      const url =
+        pageNum === 1
+          ? "https://io3000.com/"
+          : `https://io3000.com/?page=${pageNum}`;
+
+      try {
+        const res = await page.goto(url, {
+          waitUntil: "domcontentloaded",
+          timeout: 20000,
+        });
+
+        if (!res || res.status() === 404) break;
+
+        const siteUrls = await page.evaluate((snsDomains: string[]) => {
+          return Array.from(
+            document.querySelectorAll<HTMLAnchorElement>(
+              'a.list-index__target[target="_blank"]',
+            ),
+          )
+            .map((a) => a.href)
+            .filter(
+              (h) =>
+                h.startsWith("http") &&
+                !h.includes("io3000.com") &&
+                !snsDomains.some((sns) => h.includes(sns)),
+            );
+        }, SNS_DOMAINS);
+
+        // セレクタが空なら別パターンも試す
+        const fallbackUrls =
+          siteUrls.length === 0
+            ? await page.evaluate((snsDomains: string[]) => {
+                return Array.from(
+                  document.querySelectorAll<HTMLAnchorElement>(
+                    'a[target="_blank"][rel="noopener"]',
+                  ),
+                )
+                  .map((a) => a.href)
+                  .filter(
+                    (h) =>
+                      h.startsWith("http") &&
+                      !h.includes("io3000.com") &&
+                      !snsDomains.some((sns) => h.includes(sns)),
+                  );
+              }, SNS_DOMAINS)
+            : [];
+
+        const allUrls = siteUrls.length > 0 ? siteUrls : fallbackUrls;
+
+        for (const siteUrl of allUrls) {
+          try {
+            const parsed = new URL(siteUrl);
+            const normalized = `${parsed.protocol}//${parsed.hostname}`;
+            if (!existingUrls.has(normalizeForDedup(normalized))) {
+              existingUrls.add(normalizeForDedup(normalized));
+              results.push({ url: normalized, source: "io3000", priority: 1 });
+            }
+          } catch {
+            // URL パース失敗は無視
+          }
+        }
+
+        console.log(`[harvest] I/O 3000 page${pageNum}: ${allUrls.length}件`);
+        await sleep(1500);
+
+        // 取得できなければ終端とみなす
+        if (allUrls.length === 0) break;
+      } catch (err) {
+        console.warn(`[harvest] I/O 3000 page${pageNum} エラー:`, err);
+        break;
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return results;
+}
+
+// ============================================================
+// F. MUUUUU.ORG（国内デザインギャラリー）
+//    トップページ + ページネーションから
+//    class="c-post-list__link" のリンクで元サイトURLを取得する
+// ============================================================
+
+async function harvestMuuuuu(
+  existingUrls: Set<string>,
+): Promise<{ url: string; source: string; priority: number }[]> {
+  const results: { url: string; source: string; priority: number }[] = [];
+
+  const browser = await chromium.launch({ args: ["--no-sandbox"] });
+  try {
+    const context = await browser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    });
+    const page = await context.newPage();
+
+    // 最大5ページまで巡回（1ページあたり約15件）
+    for (let pageNum = 1; pageNum <= 5; pageNum++) {
+      const url =
+        pageNum === 1
+          ? "https://muuuuu.org/"
+          : `https://muuuuu.org/page/${pageNum}/`;
+
+      try {
+        const res = await page.goto(url, {
+          waitUntil: "domcontentloaded",
+          timeout: 20000,
+        });
+
+        if (!res || res.status() === 404) break;
+
+        const siteUrls = await page.evaluate((snsDomains: string[]) => {
+          return Array.from(
+            document.querySelectorAll<HTMLAnchorElement>(
+              'a.c-post-list__link[target="_blank"]',
+            ),
+          )
+            .map((a) => a.href)
+            .filter(
+              (h) =>
+                h.startsWith("http") &&
+                h.trim() !== "" &&
+                !h.includes("muuuuu.org") &&
+                !snsDomains.some((sns) => h.includes(sns)),
+            );
+        }, SNS_DOMAINS);
+
+        for (const siteUrl of siteUrls) {
+          try {
+            const parsed = new URL(siteUrl);
+            const normalized = `${parsed.protocol}//${parsed.hostname}`;
+            if (!existingUrls.has(normalizeForDedup(normalized))) {
+              existingUrls.add(normalizeForDedup(normalized));
+              results.push({ url: normalized, source: "muuuuu", priority: 1 });
+            }
+          } catch {
+            // URL パース失敗は無視
+          }
+        }
+
+        console.log(`[harvest] MUUUUU.ORG page${pageNum}: ${siteUrls.length}件`);
+        await sleep(1500);
+
+        if (siteUrls.length === 0) break;
+      } catch (err) {
+        console.warn(`[harvest] MUUUUU.ORG page${pageNum} エラー:`, err);
+        break;
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return results;
+}
+
+// ============================================================
+// G. SANKOU!（国内デザインギャラリー）
+//    Skova Digitalターゲット業種に対応するカテゴリページを巡回し
+//    target="_blank" rel="noopener" リンクから元サイトURLを取得する
+//    ※同じURLが3回出る構造なので重複除去が必須
+// ============================================================
+
+/** SANKOU! の対象カテゴリ（Skova Digitalターゲット業種対応） */
+const SANKOU_CATEGORIES = [
+  "cafe-restaurant-tavern",                            // カフェ・飲食
+  "salon",                                             // サロン・美容
+  "hospital-clinic-medicalcare-dentist",               // 医療・クリニック
+  "beauty-cosmetics-caregoods",                        // 美容・コスメ
+  "architecture-construction-realestate-home-garden",  // 不動産・建築
+  "cooking-food-beverage",                             // 食品・飲料
+  "health-sport",                                      // ヘルス・スポーツ
+  "bank-insurance-finance-law",                        // 金融・士業
+  "it-internet-media",                                 // IT・Web
+  "school-lesson",                                     // 教育・スクール
+];
+
+async function harvestSankou(
+  existingUrls: Set<string>,
+): Promise<{ url: string; source: string; priority: number }[]> {
+  const results: { url: string; source: string; priority: number }[] = [];
+
+  const browser = await chromium.launch({ args: ["--no-sandbox"] });
+  try {
+    const context = await browser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    });
+    const page = await context.newPage();
+
+    for (const category of SANKOU_CATEGORIES) {
+      // 各カテゴリの1〜3ページを巡回
+      for (let pageNum = 1; pageNum <= 3; pageNum++) {
+        const url =
+          pageNum === 1
+            ? `https://sankoudesign.com/category/${category}/`
+            : `https://sankoudesign.com/category/${category}/page/${pageNum}/`;
+
+        try {
+          const res = await page.goto(url, {
+            waitUntil: "domcontentloaded",
+            timeout: 20000,
+          });
+
+          if (!res || res.status() === 404) break;
+
+          // target="_blank" rel="noopener" のリンクをすべて取得
+          // ※同じURLが複数出るため hostname レベルで重複除去する
+          const siteUrls = await page.evaluate((snsDomains: string[]) => {
+            const seen = new Set<string>();
+            const unique: string[] = [];
+
+            for (const a of Array.from(
+              document.querySelectorAll<HTMLAnchorElement>(
+                'a[target="_blank"][rel="noopener"]',
+              ),
+            )) {
+              const h = a.href;
+              if (
+                !h.startsWith("http") ||
+                h.includes("sankoudesign.com") ||
+                snsDomains.some((sns) => h.includes(sns))
+              )
+                continue;
+
+              try {
+                const parsed = new URL(h);
+                const host = parsed.hostname.toLowerCase();
+                if (!seen.has(host)) {
+                  seen.add(host);
+                  unique.push(`${parsed.protocol}//${parsed.hostname}`);
+                }
+              } catch {
+                // skip
+              }
+            }
+            return unique;
+          }, SNS_DOMAINS);
+
+          for (const siteUrl of siteUrls) {
+            if (!existingUrls.has(normalizeForDedup(siteUrl))) {
+              existingUrls.add(normalizeForDedup(siteUrl));
+              results.push({ url: siteUrl, source: "sankou", priority: 1 });
+            }
+          }
+
+          console.log(
+            `[harvest] SANKOU! /${category}/ page${pageNum}: ${siteUrls.length}件`,
+          );
+          await sleep(1500);
+
+          if (siteUrls.length === 0) break;
+        } catch (err) {
+          console.warn(`[harvest] SANKOU! ${url} エラー:`, err);
+          break;
+        }
+      }
+    }
+  } finally {
+    await browser.close();
   }
 
   return results;

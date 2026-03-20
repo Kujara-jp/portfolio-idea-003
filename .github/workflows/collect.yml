@@ -55,13 +55,30 @@ jobs:
         run: npx tsx scripts/retry.ts --limit=20
         continue-on-error: true
 
-      - name: Run harvest script
+      - name: Run harvest script (Tavily)
         env:
           SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
         run: |
-          npx tsx scripts/harvest.ts --limit=200
+          npx tsx scripts/harvest.ts --source=tavily --limit=80
+        continue-on-error: true
+
+      - name: Run harvest script (Awwwards + CSSDA, weekly on Saturday)
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && startsWith(github.event.schedule, '0 21') && contains(toJSON(github.run_number), ''))
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
+        # Awwwards/CSSDAは週1回（土曜）のみ実行 — UTC6:00 (JST15:00)のcron追加が必要な場合は別途設定
+        run: |
+          DAY=$(date +%u)
+          if [ "$DAY" = "6" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "土曜日のため Awwwards/CSSDA を実行"
+            npx tsx scripts/harvest.ts --source=awwwards --limit=30 || true
+            npx tsx scripts/harvest.ts --source=cssda --limit=30 || true
+          else
+            echo "土曜日以外のため Awwwards/CSSDA をスキップ"
+          fi
         continue-on-error: true
 
       - name: Run collect script
