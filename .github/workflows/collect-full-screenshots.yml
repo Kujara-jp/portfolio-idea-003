@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       limit:
-        description: "1回の実行で処理する最大件数（デフォルト: 20）"
+        description: "1回の実行で処理する最大件数（デフォルト: 9999=全件）"
         required: false
-        default: "20"
+        default: "9999"
       min_quality:
         description: "最低品質スコア（1-5、デフォルト: 3）"
         required: false
@@ -52,7 +52,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          LIMIT=${{ github.event.inputs.limit || '20' }}
+          LIMIT=${{ github.event.inputs.limit || '9999' }}
           MIN_QUALITY=${{ github.event.inputs.min_quality || '3' }}
           FORCE=${{ github.event.inputs.force || 'false' }}
 

@@ -37,7 +37,7 @@ const MAX_SEGMENTS = 8;      // 最大分割数（= 最大 9,600px まで）
 const args = process.argv.slice(2);
 const limitArg = args.find((a) => a.startsWith("--limit="));
 const qualityArg = args.find((a) => a.startsWith("--min-quality="));
-const BATCH_LIMIT = limitArg ? parseInt(limitArg.split("=")[1]) : 20;
+const BATCH_LIMIT = limitArg ? parseInt(limitArg.split("=")[1]) : 9999;
 const MIN_QUALITY = qualityArg ? parseInt(qualityArg.split("=")[1]) : 3;
 const FORCE_RECOLLECT = args.includes("--force");
 
