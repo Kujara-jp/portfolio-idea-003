@@ -12,7 +12,13 @@
     "score": "dotenv -e .env.local -- tsx scripts/score.ts",
     "embed": "dotenv -e .env.local -- tsx scripts/embed.ts",
     "dedup": "dotenv -e .env.local -- tsx scripts/dedup.ts",
-    "cooccurrence": "dotenv -e .env.local -- tsx scripts/cooccurrence.ts"
+    "cooccurrence": "dotenv -e .env.local -- tsx scripts/cooccurrence.ts",
+    "industry": "dotenv -e .env.local -- tsx scripts/industry.ts",
+    "sections": "dotenv -e .env.local -- tsx scripts/sections.ts",
+    "harvest": "dotenv -e .env.local -- tsx scripts/harvest.ts",
+    "discover": "dotenv -e .env.local -- tsx scripts/discover.ts",
+    "backup": "dotenv -e .env.local -- tsx scripts/backup.ts",
+    "retry": "dotenv -e .env.local -- tsx scripts/retry.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
