@@ -1,0 +1,55 @@
+name: design-vault re-embed (全件再embedding)
+
+on:
+  # 手動実行のみ（大量API呼び出しのため自動実行しない）
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "1回の実行で処理する件数（推奨: 200）"
+        required: false
+        default: "200"
+      offset:
+        description: "開始位置 (0から始まる)。分割実行時にoffsetをずらして実行する"
+        required: false
+        default: "0"
+
+concurrency:
+  group: re-embed
+  cancel-in-progress: false
+
+jobs:
+  re-embed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run re-embed script
+        env:
+          SUPABASE_URL: ${{ secrets.DESIGN_VAULT_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          LIMIT=${{ github.event.inputs.limit || '200' }}
+          OFFSET=${{ github.event.inputs.offset || '0' }}
+          echo "再embedding実行: offset=$OFFSET, limit=$LIMIT"
+          npx tsx scripts/embed.ts --re-embed --limit=$LIMIT --offset=$OFFSET
+
+      - name: Summary
+        run: |
+          echo "## 再embedding完了" >> $GITHUB_STEP_SUMMARY
+          echo "- offset: ${{ github.event.inputs.offset || '0' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- limit: ${{ github.event.inputs.limit || '200' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**次回実行時は offset を $(( ${{ github.event.inputs.offset || 0 }} + ${{ github.event.inputs.limit || 200 }} )) に設定してください**" >> $GITHUB_STEP_SUMMARY
