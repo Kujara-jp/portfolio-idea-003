@@ -28,7 +28,7 @@ const offsetArg = args.find((a) => a.startsWith("--offset="));
 const OFFSET = offsetArg ? parseInt(offsetArg.split("=")[1]) : 0;
 
 const POLL_INTERVAL_MS = 30_000; // 30秒おきにポーリング
-const MAX_WAIT_MS = 25 * 60 * 1000; // 最大25分待機
+const MAX_WAIT_MS = 55 * 60 * 1000; // 最大55分待機
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });

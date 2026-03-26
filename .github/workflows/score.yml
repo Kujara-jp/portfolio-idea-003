@@ -46,7 +46,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          LIMIT=${{ github.event.inputs.limit || '80' }}
+          LIMIT=${{ github.event.inputs.limit || '40' }}
           npx tsx scripts/score.ts --limit=$LIMIT
 
       - name: Run tag script
@@ -55,7 +55,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          LIMIT=${{ github.event.inputs.limit || '80' }}
+          LIMIT=${{ github.event.inputs.limit || '40' }}
           npx tsx scripts/tag.ts --limit=$LIMIT
 
       - name: Detect page sections
@@ -64,7 +64,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          LIMIT=${{ github.event.inputs.limit || '80' }}
+          LIMIT=${{ github.event.inputs.limit || '40' }}
           npx tsx scripts/sections.ts --limit=$LIMIT
         continue-on-error: true
 
@@ -74,7 +74,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          LIMIT=${{ github.event.inputs.limit || '80' }}
+          LIMIT=${{ github.event.inputs.limit || '40' }}
           npx tsx scripts/industry.ts --limit=$LIMIT
 
       - name: Run embedding script
@@ -83,5 +83,5 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.DESIGN_VAULT_SUPABASE_SERVICE_ROLE_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          LIMIT=${{ github.event.inputs.limit || '80' }}
+          LIMIT=${{ github.event.inputs.limit || '40' }}
           npx tsx scripts/embed.ts --limit=$LIMIT
