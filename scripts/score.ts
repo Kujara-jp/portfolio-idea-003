@@ -144,153 +144,172 @@ async function main() {
     return;
   }
 
-  // Batch API にまとめて送信
-  console.log(`[score] Batch API 送信中（${requests.length}件）...`);
-  const batch = await anthropic.messages.batches.create({
-    requests: requests.map((req, i) => ({
-      custom_id: pageIds[i],
-      params: req,
-    })),
-  });
-
-  console.log(`[score] バッチID: ${batch.id} 完了待ち...`);
-
-  // ポーリングで完了を待つ
-  const startTime = Date.now();
-  let batchResult = batch;
-  while (batchResult.processing_status !== "ended") {
-    if (Date.now() - startTime > MAX_WAIT_MS) {
-      console.error("[score] タイムアウト。次回実行時に再試行されます。");
-      process.exit(1);
-    }
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-    batchResult = await anthropic.messages.batches.retrieve(batch.id);
-    console.log(`[score] ステータス: ${batchResult.processing_status}`);
+  // Anthropic Batch API はリクエストボディサイズ上限があるため、
+  // base64エンコードされた画像を大量に含む場合は上限に達しやすい。
+  // PNG形式（WebPより大きい）での PC+SP 画像を考慮し、安全のため最大15件ずつに分割して送信する。
+  const CHUNK_SIZE = 15;
+  const chunks: Array<{ reqs: Anthropic.MessageCreateParamsNonStreaming[]; ids: string[] }> = [];
+  for (let i = 0; i < requests.length; i += CHUNK_SIZE) {
+    chunks.push({
+      reqs: requests.slice(i, i + CHUNK_SIZE),
+      ids: pageIds.slice(i, i + CHUNK_SIZE),
+    });
   }
 
-  // 結果を取得して Supabase に保存
-  console.log("[score] 結果取得・DB更新中...");
-  for await (const result of await anthropic.messages.batches.results(
-    batch.id,
-  )) {
-    const pageId = result.custom_id;
-    if (result.result.type !== "succeeded") {
-      console.error(`[score] ❌ 失敗 page_id=${pageId}:`, result.result.type);
-      continue;
+  console.log(`[score] ${requests.length}件を${chunks.length}チャンク（最大${CHUNK_SIZE}件/チャンク）に分割して送信します`);
+
+  for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx++) {
+    const chunk = chunks[chunkIdx];
+    console.log(`[score] チャンク ${chunkIdx + 1}/${chunks.length}（${chunk.reqs.length}件）送信中...`);
+
+    const batch = await anthropic.messages.batches.create({
+      requests: chunk.reqs.map((req, i) => ({
+        custom_id: chunk.ids[i],
+        params: req,
+      })),
+    });
+
+    console.log(`[score] バッチID: ${batch.id} 完了待ち...`);
+
+    // ポーリングで完了を待つ
+    const startTime = Date.now();
+    let batchResult = batch;
+    while (batchResult.processing_status !== "ended") {
+      if (Date.now() - startTime > MAX_WAIT_MS) {
+        console.error("[score] タイムアウト。次回実行時に再試行されます。");
+        process.exit(1);
+      }
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      batchResult = await anthropic.messages.batches.retrieve(batch.id);
+      console.log(`[score] ステータス: ${batchResult.processing_status}`);
     }
 
-    try {
-      const text = result.result.message.content
-        .filter((c) => c.type === "text")
-        .map((c) => (c as Anthropic.TextBlock).text)
-        .join("");
-
-      const page = pages.find((p) => p.page_id === pageId)!;
-      const scored = parseScoreResponse(text, !!page.screenshot_sp);
-
-      // ホームページ判定: page_url と sites.url を比較
-      // page_type ではなく URL で判定（その他・未分類はサブページにも使われるため）
-      const pageSite = (Array.isArray(page.sites) ? page.sites[0] : page.sites) as
-        | { url: string; target_user: string[] | null }
-        | null
-        | undefined;
-      const isHomepage = !!(
-        pageSite?.url &&
-        page.page_url &&
-        normalizeUrl(page.page_url) === normalizeUrl(pageSite.url)
-      );
-
-      // ブロック検出: pages にフラグを立てて終了
-      // AGENT.md準拠: ブロック時は pages.needs_review=false
-      // サイトレベルのブロックはホームページの場合のみ
-      if (scored.is_blocked) {
-
-        if (isHomepage) {
-          const { error: siteBlockError } = await supabase
-            .from("sites")
-            .update({
-              is_blocked: true,
-              quality_score: null,
-            })
-            .eq("site_id", page.site_id);
-          if (siteBlockError)
-            throw new Error(`sites ブロック更新エラー: ${siteBlockError.message}`);
-        }
-
-        const { error: pageBlockError } = await supabase
-          .from("pages")
-          .update({
-            is_blocked: true,
-            responsive_score: null,
-            needs_review: false,
-          })
-          .eq("page_id", pageId);
-        if (pageBlockError)
-          throw new Error(`pages ブロック更新エラー: ${pageBlockError.message}`);
-
-        console.log(`[score] 🚫 ブロック検出 page_id=${pageId} (${page.page_type}) → スキップ`);
+    // 結果を取得して Supabase に保存
+    console.log(`[score] チャンク ${chunkIdx + 1} 結果取得・DB更新中...`);
+    for await (const result of await anthropic.messages.batches.results(
+      batch.id,
+    )) {
+      const pageId = result.custom_id;
+      if (result.result.type !== "succeeded") {
+        console.error(`[score] ❌ 失敗 page_id=${pageId}:`, result.result.type);
         continue;
       }
 
-      // sites テーブルのクオリティスコアを更新（ホームページの場合のみ）
-      // サブページのスコアでサイト代表値を上書きしない
-      // needs_reviewはtrueの場合のみ設定（他スクリプトがsite-levelで立てたフラグを消さないため）
-      if (isHomepage) {
-        const siteUpdate: Record<string, unknown> = {
-          quality_score: scored.quality_score,
-        };
-        if (scored.needs_review) {
-          siteUpdate.needs_review = true;
+      try {
+        const text = result.result.message.content
+          .filter((c) => c.type === "text")
+          .map((c) => (c as Anthropic.TextBlock).text)
+          .join("");
+
+        const page = pages.find((p) => p.page_id === pageId)!;
+        const scored = parseScoreResponse(text, !!page.screenshot_sp);
+
+        // ホームページ判定: page_url と sites.url を比較
+        // page_type ではなく URL で判定（その他・未分類はサブページにも使われるため）
+        const pageSite = (Array.isArray(page.sites) ? page.sites[0] : page.sites) as
+          | { url: string; target_user: string[] | null }
+          | null
+          | undefined;
+        const isHomepage = !!(
+          pageSite?.url &&
+          page.page_url &&
+          normalizeUrl(page.page_url) === normalizeUrl(pageSite.url)
+        );
+
+        // ブロック検出: pages にフラグを立てて終了
+        // AGENT.md準拠: ブロック時は pages.needs_review=false
+        // サイトレベルのブロックはホームページの場合のみ
+        if (scored.is_blocked) {
+
+          if (isHomepage) {
+            const { error: siteBlockError } = await supabase
+              .from("sites")
+              .update({
+                is_blocked: true,
+                quality_score: null,
+              })
+              .eq("site_id", page.site_id);
+            if (siteBlockError)
+              throw new Error(`sites ブロック更新エラー: ${siteBlockError.message}`);
+          }
+
+          const { error: pageBlockError } = await supabase
+            .from("pages")
+            .update({
+              is_blocked: true,
+              responsive_score: null,
+              needs_review: false,
+            })
+            .eq("page_id", pageId);
+          if (pageBlockError)
+            throw new Error(`pages ブロック更新エラー: ${pageBlockError.message}`);
+
+          console.log(`[score] 🚫 ブロック検出 page_id=${pageId} (${page.page_type}) → スキップ`);
+          continue;
         }
-        const { error: siteError } = await supabase
-          .from("sites")
-          .update(siteUpdate)
-          .eq("site_id", page.site_id);
-        if (siteError) throw new Error(`sites 更新エラー: ${siteError.message}`);
-      } else if (scored.needs_review) {
-        // サブページでも needs_review は反映（one-way true）
-        const { error: siteError } = await supabase
-          .from("sites")
-          .update({ needs_review: true })
-          .eq("site_id", page.site_id);
-        if (siteError) throw new Error(`sites 更新エラー: ${siteError.message}`);
-      }
 
-      // pages テーブルのレスポンシブスコアを更新
-      const { error: pageError } = await supabase
-        .from("pages")
-        .update({
-          responsive_score: scored.responsive_score,
-          needs_review: scored.needs_review,
-        })
-        .eq("page_id", pageId);
-      if (pageError) throw new Error(`pages 更新エラー: ${pageError.message}`);
+        // sites テーブルのクオリティスコアを更新（ホームページの場合のみ）
+        // サブページのスコアでサイト代表値を上書きしない
+        // needs_reviewはtrueの場合のみ設定（他スクリプトがsite-levelで立てたフラグを消さないため）
+        if (isHomepage) {
+          const siteUpdate: Record<string, unknown> = {
+            quality_score: scored.quality_score,
+          };
+          if (scored.needs_review) {
+            siteUpdate.needs_review = true;
+          }
+          const { error: siteError } = await supabase
+            .from("sites")
+            .update(siteUpdate)
+            .eq("site_id", page.site_id);
+          if (siteError) throw new Error(`sites 更新エラー: ${siteError.message}`);
+        } else if (scored.needs_review) {
+          // サブページでも needs_review は反映（one-way true）
+          const { error: siteError } = await supabase
+            .from("sites")
+            .update({ needs_review: true })
+            .eq("site_id", page.site_id);
+          if (siteError) throw new Error(`sites 更新エラー: ${siteError.message}`);
+        }
 
-      if (scored.has_overlay) {
-        console.warn(
-          `[score] ⚠️ オーバーレイ検出 page_id=${pageId} → needs_review=true（再収集推奨）`,
-        );
-      }
-      if (scored.quality_score == null) {
-        console.warn(
-          `[score] ⚠️ quality_score欠落 page_id=${pageId} → needs_review=true`,
-        );
-      }
-      if (page.screenshot_sp && scored.responsive_score == null) {
-        console.warn(
-          `[score] ⚠️ responsive_score欠落（SP有り） page_id=${pageId} → needs_review=true`,
-        );
-      }
+        // pages テーブルのレスポンシブスコアを更新
+        const { error: pageError } = await supabase
+          .from("pages")
+          .update({
+            responsive_score: scored.responsive_score,
+            needs_review: scored.needs_review,
+          })
+          .eq("page_id", pageId);
+        if (pageError) throw new Error(`pages 更新エラー: ${pageError.message}`);
 
-      console.log(
-        `[score] ✅ 完了 quality=${scored.quality_score ?? "null"} responsive=${
-          scored.responsive_score ?? "n/a"
-        }`,
-      );
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`[score] ❌ エラー page_id=${pageId} - ${message}`);
+        if (scored.has_overlay) {
+          console.warn(
+            `[score] ⚠️ オーバーレイ検出 page_id=${pageId} → needs_review=true（再収集推奨）`,
+          );
+        }
+        if (scored.quality_score == null) {
+          console.warn(
+            `[score] ⚠️ quality_score欠落 page_id=${pageId} → needs_review=true`,
+          );
+        }
+        if (page.screenshot_sp && scored.responsive_score == null) {
+          console.warn(
+            `[score] ⚠️ responsive_score欠落（SP有り） page_id=${pageId} → needs_review=true`,
+          );
+        }
+
+        console.log(
+          `[score] ✅ 完了 quality=${scored.quality_score ?? "null"} responsive=${
+            scored.responsive_score ?? "n/a"
+          }`,
+        );
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[score] ❌ エラー page_id=${pageId} - ${message}`);
+      }
     }
+
+    console.log(`[score] チャンク ${chunkIdx + 1}/${chunks.length} 完了`);
   }
 
   console.log("\n[score] 全処理完了");
