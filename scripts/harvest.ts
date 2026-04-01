@@ -287,14 +287,15 @@ async function main() {
   const toInsert = collectedUrls.slice(0, HARVEST_LIMIT);
   console.log(`[harvest] ${toInsert.length}件を collect_queue に投入します`);
 
-  // collect_queue に INSERT
-  const { error } = await supabase.from("collect_queue").insert(
+  // collect_queue に INSERT（既登録URLは重複無視）
+  const { error } = await supabase.from("collect_queue").upsert(
     toInsert.map((item) => ({
       url: canonicalizeUrl(item.url),
       status: "pending",
       priority: item.priority,
       normalized_url: normalizeForDedup(item.url),
     })),
+    { onConflict: "url", ignoreDuplicates: true },
   );
 
   if (error) {
